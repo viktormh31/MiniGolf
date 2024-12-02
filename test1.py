@@ -15,22 +15,48 @@ p.resetSimulation()
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 p.setGravity(0.0,0.0,-9.81)
 p.setRealTimeSimulation(0)
-p.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
-fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
-joint_init_pos = [0, -0.009068751632859924, -0.08153217279952825, 
-                                0.09299669711139864, 1.067692645248743, 0.0004018824370178429, 
-                                1.1524205092196147, -0.0004991403332530034] + [0]*9
+plane = p.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
 
-xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
-for i in range(17):
-    p.resetJointState(xarm,i,joint_init_pos[i])
+fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_ball.urdf')
+sphere = p.loadURDF(fullpath,[0.5,0,0.6],useFixedBase=True)
 
-fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_sphere.urdf')
-sphere = p.loadURDF(fullpath,[0.5,0,0.02],useFixedBase=True)
+ball_shape = p.createVisualShape(shapeType= p.GEOM_SPHERE, radius= 0.05, rgbaColor = [0, 0 ,0.8, 1])
+ball_colision = p.createCollisionShape(shapeType = p.GEOM_SPHERE, radius = 0.05)
+
+golf_ball = p.createMultiBody(baseMass = 0.1,
+                              baseInertialFramePosition = [0,0,0],
+                              baseCollisionShapeIndex = ball_colision,
+                              baseVisualShapeIndex = ball_shape,
+                              basePosition = [0,0,2],
+                              useMaximalCoordinates = True)
+
+golf_ball2 = p.createMultiBody(baseMass = 0.1,
+                              baseInertialFramePosition = [0,0,0],
+                              baseCollisionShapeIndex = ball_colision,
+                              baseVisualShapeIndex = ball_shape,
+                              basePosition = [0.3,0.01,.05],
+                              useMaximalCoordinates = False)
+
+p.changeDynamics(plane,-1, 
+                 lateralFriction = .2,
+                 rollingFriction = .1,
+                 restitution = .7)
+p.changeDynamics(golf_ball2,-1,
+                restitution = .3)
+p.changeDynamics(golf_ball,-1,
+                restitution = .3)
+
+fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
+hole = p.loadURDF(fullpath,[1,0,-.09], [0,0,0,1],useFixedBase=True)
 
 
-
-
+for i in range(1000):
+    p.stepSimulation()
+    time.sleep(.01)
+    print(i)
+    print(p.getBasePositionAndOrientation(golf_ball))
+    if i == 500:
+        p.resetBasePositionAndOrientation(golf_ball, [0,0,0.1], [0,0,0,1])
 
 
 time.sleep(20)

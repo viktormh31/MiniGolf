@@ -41,6 +41,6 @@ for episode in range(10):
             break
 
 
-        time.sleep(.01)
+        time.sleep(2/120)
         #print(action)
 time.sleep(122)

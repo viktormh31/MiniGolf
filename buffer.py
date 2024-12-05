@@ -1,6 +1,5 @@
 import numpy as np
 import random
-import torch
 from collections import deque
 
 class HERBuffer():

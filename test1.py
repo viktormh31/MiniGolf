@@ -47,7 +47,17 @@ p.changeDynamics(golf_ball,-1,
                 restitution = .3)
 
 fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
-hole = p.loadURDF(fullpath,[1,0,-.09], [0,0,0,1],useFixedBase=True)
+hole = p.loadURDF(fullpath,[1,0,0], [0,0,0,1],useFixedBase=True)
+
+fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
+xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
+
+print("Gravity:", p.getGravity())
+print("Robot base pose:", p.getBasePositionAndOrientation(xarm))
+for i in range(p.getNumJoints(xarm)):
+    print(f"Link {i}: {p.getJointInfo(xarm, i)}")
+
+
 
 
 for i in range(1000):

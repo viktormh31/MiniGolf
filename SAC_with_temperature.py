@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 import time
 import random
-from buffer import HERBuffer
+from memory import HerBuffer
 import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 
@@ -111,16 +111,20 @@ class ActorNetwork(nn.Module):
 
 class Agent(object):
     def __init__(self, lr_actor, lr_critic, input_dims, n_actions
-                 ,max_action,tau = 0.005, gamma= 0.99, max_size= 1000000
-                 , fc1_dim=256, fc2_dim=256, batch_size=256, reward_scale=2):
+                 ,max_action,tau = 0.005, gamma= 0.99, max_memory_size= 1000000
+                 , fc1_dim=256, fc2_dim=256, batch_size=256, batch_ratio = .5, reward_scale=2):
+        
         self.input_dims = input_dims
         self.n_actions = n_actions
-        
-        self.gamma = gamma
-        self.batch_size = batch_size
-        self.reward_scale = reward_scale
-        self.tau = tau
         self.max_action = max_action
+        self.tau = tau
+        self.gamma = gamma
+        self.max_memory_size = max_memory_size
+        self.batch_size = batch_size
+        self.batch_ratio = batch_ratio
+        self.reward_scale = reward_scale
+        
+        
 
 
         self.actor = ActorNetwork(self.input_dims,self.n_actions,self.max_action, fc1_dim,fc2_dim,lr_actor)
@@ -141,7 +145,8 @@ class Agent(object):
         #self.target_value = ValueNetwork(self.input_dims,self.n_actions,fc1_dim,fc2_dim,lr_value)
 #   
         self.update_network_params(1)
-        self.memory = HERBuffer(0.5,self.batch_size,max_size)
+        self.memory = HerBuffer(self.batch_size, self.batch_ratio,  50, self.input_dims, self.n_actions,
+                                3, self.max_memory_size)
         
     def update_network_params(self, tau= None):
         if tau is None:
@@ -155,24 +160,48 @@ class Agent(object):
 
     def learn(self,batch):
 
-        if len(self.memory.buffer.state_memory) < self.batch_size:
-            return
-        states, actions, rewards, next_states, dones, goals = batch
+        observations = batch['observations']
+        achieved_goals = batch['achieved_goals']
+        desired_goals = batch['desired_goals']
+        actions = batch['actions']
+        rewards = batch['rewards']
+        dones = batch['dones']
+        next_observations = batch['next_observations']
+        next_achieved_goals = batch['next_achieved_goals']
+        next_desired_goals = batch['next_desired_goals']
+       
+        # Conversion to tensors 
 
-        states = torch.tensor(states, dtype= torch.float32).to(self.actor.device)
+        # **Mozda moze preko torch.from_numpy**
+        observations_tensor = torch.from_numpy(observations, dtype= torch.float32).to(self.actor.device)
+        achieved_goals_tensor = torch.from_numpy(achieved_goals, dtype= torch.float32).to(self.actor.device)
+        desired_goals_tensor = torch.from_numpy(desired_goals, dtype= torch.float32).to(self.actor.device)
+        actions_tensor = torch.from_numpy(actions, dtype= torch.float32).to(self.actor.device)
+        rewards_tensor = torch.from_numpy(rewards, dtype= torch.float32).to(self.actor.device).squeeze()
+        dones_tensor = torch.from_numpy(dones, dtype= torch.int).to(self.actor.device).squeeze()
+        next_observations_tensor = torch.from_numpy(next_observations, dtype= torch.float32).to(self.actor.device)
+        next_achieved_goals_tensor = torch.from_numpy(next_achieved_goals, dtype= torch.float32).to(self.actor.device)
+        next_desired_goals_tensor = torch.from_numpy(next_desired_goals, dtype= torch.float32).to(self.actor.device)
+       
+
+        """
+        observations = torch.tensor(observations, dtype= torch.float32).to(self.actor.device)
+        achieved_goals = torch.tensor(achieved_goals, dtype= torch.float32).to(self.actor.device)
+        desired_goals = torch.tensor(desired_goals, dtype= torch.float32).to(self.actor.device)
         actions= torch.tensor(actions, dtype= torch.float32).to(self.actor.device)
         rewards = torch.tensor(rewards, dtype= torch.float32).to(self.actor.device).squeeze()
-        next_states = torch.tensor(next_states, dtype= torch.float32).to(self.actor.device)
         dones = torch.tensor(dones, dtype= torch.int).to(self.actor.device).squeeze()
-        goals = torch.tensor(goals, dtype= torch.float32).to(self.actor.device)
-       
-        obs = torch.concat((states,goals),dim=1)
-        obs_ = torch.concat((next_states,goals),dim=1)
+        next_observations = torch.tensor(next_observations, dtype= torch.float32).to(self.actor.device)
+        next_achieved_goals = torch.tensor(next_achieved_goals, dtype= torch.float32).to(self.actor.device)
+        next_desired_goals = torch.tensor(next_desired_goals, dtype= torch.float32).to(self.actor.device)
+       """
+        obs = torch.concat((observations_tensor, achieved_goals_tensor, desired_goals_tensor),dim=1)
+        obs_ = torch.concat((next_observations_tensor, next_achieved_goals_tensor, next_desired_goals_tensor),dim=1)
 
         #-------Critic networks update-------#
 
-        old_critic_values_1 = self.critic_1.forward(obs,actions).squeeze()
-        old_critic_values_2 = self.critic_2.forward(obs,actions).squeeze()
+        old_critic_values_1 = self.critic_1.forward(obs,actions_tensor).squeeze()
+        old_critic_values_2 = self.critic_2.forward(obs,actions_tensor).squeeze()
         with torch.no_grad():
             new_actions, log_probs = self.actor.sample(obs_,reparametrization=False)
             log_probs = log_probs.view(-1)
@@ -182,7 +211,7 @@ class Agent(object):
             target_values_next_states_2 = self.target_critic_2.forward(obs_,new_actions).squeeze() 
             target_values_next_states = torch.min(target_values_next_states_1,target_values_next_states_2)  - self.temperature* log_probs
             #target_values_next_states_1[dones] = 0
-            q_hat = rewards +self.gamma*(1-dones)*(target_values_next_states) # target_values_next_states and without temp*log_probs if 2 critics
+            q_hat = rewards_tensor +self.gamma*(1-dones_tensor)*(target_values_next_states) # target_values_next_states and without temp*log_probs if 2 critics
             #skloni gradijent sa q_hat
 
 
@@ -238,12 +267,3 @@ class Agent(object):
         actions, _ = self.actor.sample(obs,reparametrization=False)
 
         return actions.cpu().detach().numpy()[0]
-
-def reward(state,goal):
-        
-        
-        distance = np.linalg.norm(goal-state, axis = -1)
-        
-      
-
-        return np.array([(distance < 0.05) - 1])

@@ -81,8 +81,8 @@ class BaseBuffer():
 
     def sample(self):
 
-        if self.counter < self.batch_size: # episode buffer ne koristi ovu funkciju, ali bi inace uvek radio prazan return
-            return
+        #if self.counter < self.batch_size: # episode buffer ne koristi ovu funkciju, ali bi inace uvek radio prazan return
+        #    return
         max_index = min(self.counter, self.max_size)
         indices = np.random.choice(max_index, self.batch_size, replace=False)
         return {

@@ -9,7 +9,7 @@ from gymnasium import spaces
 class XarmRobotEnv():
 
     def __init__(self, config):
-        self.time_step = 1./240
+        self.time_step = 1./60
 
 
         # robot parameters
@@ -35,13 +35,14 @@ class XarmRobotEnv():
         # connect bullet
      
         p.connect(p.GUI)
+        p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
 
 
         # bullet setup
         ###self.seed()
         p.resetSimulation()
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        p.setGravity(0.0,0.0,-100)
+        p.setGravity(0.0,0.0,-9.81)
         p.setRealTimeSimulation(0)
         p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
 
@@ -51,19 +52,21 @@ class XarmRobotEnv():
         self._load_plane()
 
         # load robot
-        fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
-        self.xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
+        
         #self._reset_robot()
         #self._reset_robot_arm()
         # load goal
+        #self._load_golf_hole()
         fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
-        self.golf_hole = p.loadURDF(fullpath,useFixedBase=True)
-
+        self.golf_hole = p.loadURDF(fullpath,self.goal_default_pos,[0,0,0,1], useFixedBase=True)
+        
         # load ball
         #fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_ball.urdf')
         #self.ball = p.loadURDF(fullpath,[1,0,.5], [0,0,0,1],useFixedBase=True)
         self._load_golf_ball()
 
+        fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
+        self.xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
 
         # env setup
         self.action_space = spaces.Box(-1., 1., shape=(3,), dtype='float32')
@@ -88,11 +91,11 @@ class XarmRobotEnv():
         obs = self._get_obs()
         reward = self.compute_reward(obs['achieved_goal'],self.goal)
         done = (reward == 0)
-
+        time.sleep(self.time_step)
         return obs, reward, done, #info
         
     def reset(self):
-        #return obs, info
+        #return obs
         self._reset_sim()
         #self.goal = self._sample_goal()
         self.goal = self.goal_default_pos
@@ -178,12 +181,15 @@ class XarmRobotEnv():
 
     def _load_plane(self):
         plane = p.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
-
         p.changeDynamics(plane,-1, 
                  lateralFriction = .05,
                  rollingFriction = .1,
                  restitution = .7)
-
+        
+    def _load_golf_hole(self):
+        fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
+        self.golf_hole = p.loadURDF(fullpath,self.goal_default_pos,[0,0,0,1], useFixedBase=True)
+        print("aa")
     # def _reset_robot(self):
     #     for i in range(17):
     #         p.resetJointState(self.xarm,i,targetValue = self.joint_init_pos[i], targetVelocity = 0)

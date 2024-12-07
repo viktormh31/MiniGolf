@@ -6,6 +6,21 @@ import os
 import gymnasium as gym
 from gymnasium import spaces
 
+from XarmEnv import ucitaj
+
+
+ucitaj()
+
+
+
+
+
+
+
+
+
+
+
 
 
 p.connect(p.GUI)
@@ -16,6 +31,12 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 p.setGravity(0.0,0.0,-9.81)
 p.setRealTimeSimulation(0)
 plane = p.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
+
+#fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
+#xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
+
+xarm = p.loadURDF("/home/viktor/miniconda3/envs/minigolf/lib/python3.11/site-packages/pybullet_data/xarm/xarm6_with_gripper.urdf", [0,0,0], [0,0,0,1.] ,useFixedBase = True)
+
 
 fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_ball.urdf')
 sphere = p.loadURDF(fullpath,[0.5,0,0.6],useFixedBase=True)
@@ -48,16 +69,6 @@ p.changeDynamics(golf_ball,-1,
 
 fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
 hole = p.loadURDF(fullpath,[1,0,0], [0,0,0,1],useFixedBase=True)
-
-fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
-xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
-
-print("Gravity:", p.getGravity())
-print("Robot base pose:", p.getBasePositionAndOrientation(xarm))
-for i in range(p.getNumJoints(xarm)):
-    print(f"Link {i}: {p.getJointInfo(xarm, i)}")
-
-
 
 
 for i in range(1000):

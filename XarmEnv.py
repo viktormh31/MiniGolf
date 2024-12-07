@@ -9,8 +9,8 @@ from gymnasium import spaces
 class XarmRobotEnv():
 
     def __init__(self, config):
-        self.time_step = 1./60
-
+        self.time_step = 1./120
+        
 
         # robot parameters
         self.distance_threshold = 0.05
@@ -34,7 +34,26 @@ class XarmRobotEnv():
         self.golf_ball_default_pos = [0.45,0,0.02]
         # connect bullet
      
-        p.connect(p.GUI)
+        # p.connect(p.GUI)
+        # p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
+
+
+        # # bullet setup
+        # ###self.seed()
+        # p.resetSimulation()
+        # p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        # p.setGravity(0.0,0.0,-9.81)
+        # p.setRealTimeSimulation(0)
+        # p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
+
+        # fullpath = "/home/viktor/miniconda3/envs/minigolf/lib/python3.11/site-packages/pybullet_data/xarm/xarm6_with_gripper.urdf"
+        # self.xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
+        if config['GUI']:
+            p.connect(p.GUI)
+        else:
+            p.connect(p.DIRECT) 
+           
+            
         p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
 
 
@@ -44,29 +63,23 @@ class XarmRobotEnv():
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0.0,0.0,-9.81)
         p.setRealTimeSimulation(0)
-        p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
+        p.resetDebugVisualizerCamera(cameraDistance=1, cameraYaw=45, cameraPitch=-10, cameraTargetPosition=[0.3,0,0.2])
+        # load robot
+        fullpath = os.path.join(os.path.dirname(__file__), 'urdf/xarm7.urdf')
+        self.xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
 
 
         # load plane
-        #plane = p.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
         self._load_plane()
 
-        # load robot
         
-        #self._reset_robot()
-        #self._reset_robot_arm()
         # load goal
-        #self._load_golf_hole()
-        fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
-        self.golf_hole = p.loadURDF(fullpath,self.goal_default_pos,[0,0,0,1], useFixedBase=True)
-        
+        self._load_golf_hole()
+        self._reset_golf_hole()
         # load ball
         #fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_ball.urdf')
         #self.ball = p.loadURDF(fullpath,[1,0,.5], [0,0,0,1],useFixedBase=True)
         self._load_golf_ball()
-
-        fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
-        self.xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
 
         # env setup
         self.action_space = spaces.Box(-1., 1., shape=(3,), dtype='float32')
@@ -90,7 +103,7 @@ class XarmRobotEnv():
         p.stepSimulation()
         obs = self._get_obs()
         reward = self.compute_reward(obs['achieved_goal'],self.goal)
-        done = (reward == 0)
+        done = reward + 1
         time.sleep(self.time_step)
         return obs, reward, done, #info
         
@@ -188,8 +201,8 @@ class XarmRobotEnv():
         
     def _load_golf_hole(self):
         fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
-        self.golf_hole = p.loadURDF(fullpath,self.goal_default_pos,[0,0,0,1], useFixedBase=True)
-        print("aa")
+        self.golf_hole = p.loadURDF(fullpath,self.goal_default_pos,self.start_orientation, useFixedBase=True)
+        
     # def _reset_robot(self):
     #     for i in range(17):
     #         p.resetJointState(self.xarm,i,targetValue = self.joint_init_pos[i], targetVelocity = 0)
@@ -208,6 +221,8 @@ class XarmRobotEnv():
     def _reset_golf_ball(self):
         p.resetBasePositionAndOrientation(self.golf_ball, self.golf_ball_default_pos, self.start_orientation)
     
+    def _reset_golf_hole(self):
+        p.resetBasePositionAndOrientation(self.golf_hole,self.goal_default_pos,self.start_orientation)
         
     def setup_golf_course(self):
         
@@ -226,9 +241,16 @@ class XarmRobotEnv():
 
 
     def make_goal(self,point_position):
+
+    
         p.addUserDebugLine(point_position, [point_position[0], point_position[1], point_position[2] + 0.01], lineColorRGB=[1, 0, 0], lineWidth=5)
         p.addUserDebugLine(point_position, [point_position[0], point_position[1], point_position[2] - 0.01], lineColorRGB=[1, 0, 0], lineWidth=5)
         p.addUserDebugLine(point_position, [point_position[0] - 0.01, point_position[1], point_position[2]], lineColorRGB=[1, 0, 0], lineWidth=5)
         p.addUserDebugLine(point_position, [point_position[0] + 0.01, point_position[1], point_position[2]], lineColorRGB=[1, 0, 0], lineWidth=5)
         p.addUserDebugLine(point_position, [point_position[0], point_position[1] + 0.01, point_position[2]], lineColorRGB=[1, 0, 0], lineWidth=5)
         p.addUserDebugLine(point_position, [point_position[0] , point_position[1]- 0.01, point_position[2]], lineColorRGB=[1, 0, 0], lineWidth=5)
+
+
+
+
+

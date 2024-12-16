@@ -6,7 +6,7 @@ import os
 import gymnasium as gym
 from gymnasium import spaces
 
-from XarmEnv import ucitaj
+from XarmGolfEnv import ucitaj
 
 
 ucitaj()

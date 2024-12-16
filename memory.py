@@ -30,12 +30,14 @@ class BaseBuffer():
         self.max_size = max_size
         self.batch_size = batch_size
         self.counter = 0
+        self.rng = np.random.default_rng()
 
         self.observations = np.zeros((max_size,input_dims), dtype= np.float32)
         self.achieved_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
         self.desired_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
         self.actions = np.zeros((max_size,n_actions), dtype= np.float32)
         self.rewards = np.zeros((max_size), dtype= np.float32)
+        #self.rewards -= 1
         self.dones = np.zeros((max_size),dtype=np.int32)
         self.next_observations = np.zeros((max_size,input_dims), dtype= np.float32)
         self.next_achieved_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
@@ -66,7 +68,7 @@ class BaseBuffer():
             
         else:
             indices = np.arange(index, index + size_of_append) % self.max_size
-
+            print(size_of_append)
             self.observations[indices] = observation[0:size_of_append]
             self.achieved_goals[indices] = achieved_goal[0:size_of_append]
             self.desired_goals[indices] = desired_goal[0:size_of_append]
@@ -74,8 +76,8 @@ class BaseBuffer():
             self.rewards[indices] = reward[0:size_of_append]
             self.dones[indices] = done[0:size_of_append]
             self.next_observations[indices] = next_observation[0:size_of_append]
-            self.achieved_goals[indices] = next_achieved_goal[0:size_of_append]
-            self.desired_goals[indices] = next_desired_goal[0:size_of_append]
+            self.next_achieved_goals[indices] = next_achieved_goal[0:size_of_append]
+            self.next_desired_goals[indices] = next_desired_goal[0:size_of_append]
 
         self.counter+=size_of_append
 
@@ -85,6 +87,7 @@ class BaseBuffer():
         #    return
         max_index = min(self.counter, self.max_size)
         indices = np.random.choice(max_index, self.batch_size, replace=False)
+      
         return {
             'observations': self.observations[indices],
             'achieved_goals': self.achieved_goals[indices],
@@ -106,6 +109,8 @@ class BaseBuffer():
         self.rewards.fill(0)
         self.dones.fill(0)
         self.next_observations.fill(0)
+        self.next_achieved_goals.fill(0)
+        self.next_desired_goals.fill(0)
 
 
 

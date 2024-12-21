@@ -1,5 +1,4 @@
 import numpy as np
-import random
 
 
 class HerBuffer():
@@ -20,9 +19,9 @@ class HerBuffer():
         real_batch = self.real_buffer.sample()
         her_batch = self.her_buffer.sample()
 
-        #combined_batch = {key: np.concatenate([real_batch[key], her_batch[key]],axis=0) for key in real_batch}
+        combined_batch = {key: np.concatenate([real_batch[key], her_batch[key]],axis=0) for key in real_batch}
         
-        return real_batch, her_batch
+        return combined_batch
 
 class BaseBuffer():
     def __init__(self,max_size,batch_size, input_dims, n_actions,goal_dim) -> None:

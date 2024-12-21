@@ -11,9 +11,9 @@ max_episodes = 10000
 
 lr_actor = 0.001
 lr_critic = 0.001
-env = gym.make("PandaReach-v3", render_mode ="human")
+env = gym.make("PandaSlide-v3", render_mode ="human")
 observation, _ = env.reset()
-obs_dims = 6
+obs_dims = 18
 input_dims = observation['observation'].shape[0]+observation['achieved_goal'].shape[0] + observation["desired_goal"].shape[0]
 n_actions = env.action_space.shape[0]
 max_action = 1
@@ -127,7 +127,7 @@ for episode in trange(max_episodes):
     """ 
     if time_step !=1 :
         #score = np.sum(agent.memory.episode_buffer.rewards)
-        end_achieved_episode_goal = her_achieved_goals[-1]
+        end_achieved_episode_goal = agent.memory.episode_buffer.achieved_goals[-1]
         
         critic_losses = []
         her_observations = agent.memory.episode_buffer.observations
@@ -136,7 +136,7 @@ for episode in trange(max_episodes):
         her_obs = {
             'observation': her_observations,
             'achieved_goal': her_achieved_goals,
-            'desired_goal': her_desired_goals
+            'desired_goal': end_achieved_episode_goal
         }
 
         her_actions = agent.memory.episode_buffer.actions
@@ -147,10 +147,10 @@ for episode in trange(max_episodes):
         her_next_obs = {
             'observation': her_next_observations,
             'achieved_goal': her_next_achieved_goals,
-            'desired_goal': her_next_desired_goals
+            'desired_goal': end_achieved_episode_goal
         }
         
-        end_achieved_episode_goal = her_achieved_goals[-1]
+        
         # das li ce raditi posto je jedan parametar np.array oblika(time_step, goal_dim) a drugi samo np.array(goal_dim)
         her_rewards = compute_reward(her_achieved_goals,end_achieved_episode_goal)
         her_dones = her_rewards + 1 #ish

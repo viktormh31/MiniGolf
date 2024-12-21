@@ -6,18 +6,6 @@ import os
 import gymnasium as gym
 from gymnasium import spaces
 
-from XarmGolfEnv import ucitaj
-
-
-ucitaj()
-
-
-
-
-
-
-
-
 
 
 
@@ -35,9 +23,14 @@ plane = p.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
 #fullpath = os.path.join(os.path.dirname(__file__), "urdf/xarm7.urdf")
 #xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
 
-xarm = p.loadURDF("/home/viktor/miniconda3/envs/minigolf/lib/python3.11/site-packages/pybullet_data/xarm/xarm6_with_gripper.urdf", [0,0,0], [0,0,0,1.] ,useFixedBase = True)
+fullpath = os.path.join(os.path.dirname(__file__), 'urdf/xarm7.urdf')
+xarm = p.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
 
 
+cur_pos = p.getLinkState(xarm,16)[0]
+
+
+"""
 fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_ball.urdf')
 sphere = p.loadURDF(fullpath,[0.5,0,0.6],useFixedBase=True)
 
@@ -69,15 +62,23 @@ p.changeDynamics(golf_ball,-1,
 
 fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
 hole = p.loadURDF(fullpath,[1,0,0], [0,0,0,1],useFixedBase=True)
+"""   
 
 
+max_angle = np.radians(90)
 for i in range(1000):
     p.stepSimulation()
     time.sleep(.01)
-    print(i)
-    print(p.getBasePositionAndOrientation(golf_ball))
-    if i == 500:
-        p.resetBasePositionAndOrientation(golf_ball, [0,0,0.1], [0,0,0,1])
+    orientation = p.getLinkState(xarm,16)[1]
+    cur_eul = np.array(p.getEulerFromQuaternion(orientation))
+    cur_eul[2] = cur_eul[2] - 0.05
+    cur_eul[2] = np.clip(cur_eul[2],-max_angle,max_angle)
+    new_eul = np.array([cur_eul[0],cur_eul[1],cur_eul[2]])
+   
+    new_quat = p.getQuaternionFromEuler(new_eul)
+    joint_poses = p.calculateInverseKinematics(xarm,16,cur_pos,new_quat)
+    for i in range(1,8):
+        p.setJointMotorControl2(xarm,i,p.POSITION_CONTROL, joint_poses[i-1])
 
 
 time.sleep(20)

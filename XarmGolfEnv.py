@@ -18,7 +18,7 @@ class XarmRobotGolf():
         self.dt = self.time_step * 40
         self.action_space = spaces.Box(-1., 1., shape=(4,), dtype='float32')
         self.phase = 2
-        self.difficulty = 0.6
+        self.difficulty = 0.9
 
         # bullet setup
         
@@ -58,9 +58,9 @@ class XarmRobotGolf():
 
 
         # hole params
-        self.hole_space = spaces.Box(low=np.array([0.6, -0.2, 0.02],dtype=np.float32)
+        self.hole_space = spaces.Box(low=np.array([0.9, -0.2, 0.02],dtype=np.float32)
                                     ,high=np.array([1.0 ,0.2, 0.02],dtype=np.float32))
-        self.hole_default_pos = np.array([0.8,0.05,0.02])
+        self.hole_default_pos = np.array([0.9,0.05,0.02])
         self.distance_threshold = 0.05
 
         # load goal

@@ -64,6 +64,7 @@ class ActorNetwork(nn.Module):
         self.fc3_dims = fc2_dims
         self.lr_actor = lr_actor
         self.reparam_noise = float(1e-6)
+        self.action_bias = 0.2
 
         self.fc1 = nn.Sequential(
                 nn.Linear(self.input_dims, self.fc1_dims),
@@ -111,7 +112,7 @@ class ActorNetwork(nn.Module):
         log_probs = probabilities.log_prob(actions)
         log_probs -= torch.log(1-action.pow(2)+self.reparam_noise)
         log_probs = log_probs.sum(-1, keepdim=True)
-     
+    
 
         return action, log_probs
     
@@ -263,6 +264,8 @@ class Agent(object):
 
         self.update_network_params()
 
+        return actor_loss,critic_loss,temperature_loss
+
         
 
 
@@ -272,8 +275,8 @@ class Agent(object):
     def training_mode(self):
         self.actor.train()
 
-    def choose_action(self,obs):
+    def choose_action(self,obs,reparametrization = False):
         obs = torch.from_numpy(obs).to(self.actor.device)
-        actions, _ = self.actor.sample(obs,reparametrization=False)
+        actions, _ = self.actor.sample(obs,reparametrization)
 
         return actions.cpu().detach().numpy()

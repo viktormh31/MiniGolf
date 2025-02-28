@@ -40,7 +40,7 @@ class CriticNetwork(nn.Module):
             )
         self.q = nn.Linear(self.fc3_dims,1)
 
-        self.optimizer = optim.Adam(self.parameters(),lr=lr_critic)
+        self.optimizer = optim.AdamW(self.parameters(),lr=lr_critic)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
         self.to(self.device)
 
@@ -64,7 +64,7 @@ class ActorNetwork(nn.Module):
         self.fc3_dims = fc2_dims
         self.lr_actor = lr_actor
         self.reparam_noise = float(1e-6)
-        self.action_bias = 0.2
+        
 
         self.fc1 = nn.Sequential(
                 nn.Linear(self.input_dims, self.fc1_dims),
@@ -82,7 +82,7 @@ class ActorNetwork(nn.Module):
         self.mu = nn.Linear(self.fc3_dims,self.n_actions)
         self.var = nn.Linear(self.fc3_dims,self.n_actions)
             
-        self.optimizer = optim.Adam(self.parameters(),lr=lr_actor)
+        self.optimizer = optim.AdamW(self.parameters(),lr=lr_actor)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
         self.to(self.device)
         
@@ -146,16 +146,17 @@ class Agent(object):
         self.target_critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic)
 
 
-        self.target_entropy = - self.n_actions
-        self.temperature = 0.2
-        self.log_temperature = torch.tensor([0.0], requires_grad=True, device= DEVICE)
-        self.temperature_optimizer = optim.Adam(params=[self.log_temperature],lr=lr_actor)
+        self.target_entropy = -2 #self.n_actions
+        self.temperature = 0.3
+        self.log_temperature = torch.zeros(1, requires_grad=True, device= DEVICE)
+        self.temperature_optimizer = optim.AdamW(params=[self.log_temperature],lr=lr_actor)
 
+        self.initialize_weights(self.actor)
+        self.initialize_weights(self.critic_1)
+        self.initialize_weights(self.critic_2)
+        
 
-
-        #self.value = ValueNetwork(self.input_dims,self.n_actions,fc1_dim,fc2_dim,lr_value)
-        #self.target_value = ValueNetwork(self.input_dims,self.n_actions,fc1_dim,fc2_dim,lr_value)
-#   
+    
         self.update_network_params(1)
         self.memory = HerBuffer(self.batch_size, self.batch_ratio,  50, self.obs_dims, self.n_actions,
                                 3, self.max_memory_size)
@@ -169,6 +170,13 @@ class Agent(object):
         for eval_param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
             target_param.data.copy_(tau*eval_param + (1.0-tau)*target_param.data)
             
+
+    def initialize_weights(self,model):
+        for layer in model.modules():
+            if isinstance(layer, nn.Linear):
+                torch.nn.init.xavier_uniform_(layer.weight)
+                if layer.bias is not None:
+                    torch.nn.init.zeros_(layer.bias)
 
     def learn(self,batch):
 
@@ -215,16 +223,17 @@ class Agent(object):
             #skloni gradijent sa q_hat
 
 
-        self.critic_1.optimizer.zero_grad()
-        self.critic_2.optimizer.zero_grad()
+        
 
         #proveri koji gradijent se koristi
-        critic_loss_1 = F.mse_loss(old_critic_values_1,q_hat)*0.5 
-        critic_loss_2 = 0.5 * F.mse_loss(old_critic_values_2,q_hat)
+        critic_loss_1 = F.mse_loss(old_critic_values_1,q_hat)
+        critic_loss_2 = F.mse_loss(old_critic_values_2,q_hat)
 
         critic_loss = critic_loss_1 + critic_loss_2
-        critic_loss.backward()
 
+        self.critic_1.optimizer.zero_grad()
+        self.critic_2.optimizer.zero_grad()
+        critic_loss.backward()
         self.critic_1.optimizer.step()
         self.critic_2.optimizer.step()
 
@@ -239,9 +248,10 @@ class Agent(object):
         log_probs_temp = self.temperature * log_probs
         
 
-        self.actor.optimizer.zero_grad()
+        
         actor_loss = log_probs_temp - critic_values # critic_value if using 2 critics
         actor_loss = torch.mean(actor_loss)
+        self.actor.optimizer.zero_grad()
         actor_loss.backward()
         self.actor.optimizer.step()
 
@@ -264,7 +274,7 @@ class Agent(object):
 
         self.update_network_params()
 
-        return actor_loss,critic_loss,temperature_loss
+        return actor_loss,critic_loss,temperature_loss, self.temperature, self.log_temperature
 
         
 

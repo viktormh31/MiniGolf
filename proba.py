@@ -8,18 +8,14 @@ from XarmGolfEnv import XarmRobotGolf
 from XarmReach import XarmRobotReach
 from tqdm import trange
 import time
+import wandb
 
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
-
-
-
-
+ 
 
 #import matplotlib.pyplot as plt
 config = {
 
-    'GUI' : True,
+    'GUI' : False,
     'reward_type' : "sparse",
 }
 test_config = {
@@ -27,15 +23,34 @@ test_config = {
      'reward_type' : "sparse", 
 }
 
+wandb.init(
 
+    project = "Xarm-golf",
+    config = {
+        "lr_actor": 0.0001,
+        "lr_critic": 0.003,
+        "batch_size": 2048,
+        "nn_dims": 512,
+        "temperature": 0.3,
+        "episodes": 20000,
+        "entropy": -2,
+        "init weights": "Xavier_uniform_",
+        "optimizer": "AdamW",
+        "gamma": 0.95
+    },
+    id= 'test26'
+)  
 env =XarmRobotGolf(config)
 #test_env = XarmRobotGolf(test_config)
-lr_actor = 0.0003
-lr_critic = 0.0003
+lr_actor = 0.0001
+lr_critic = 0.003
 input_dims = 27
 obs_dims = 21
 n_actions = 4
 max_action = 1
+
+agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action,fc1_dim=512,fc2_dim=512,batch_size=2048,gamma=0.95)
+
 
 test_scores = []
 test_episode_count = 0
@@ -43,7 +58,7 @@ test_episode_count = 0
 def test():
     with torch.no_grad():
         test_env = XarmRobotGolf(test_config)
-        test_env.phase = 2
+        test_env.phase = env.phase
         #test_env.test_reset()
         agent.evaluate_mode()
         test_episode_range = 10 
@@ -73,7 +88,6 @@ def test():
 
 
 
-agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action,fc1_dim=512,fc2_dim=512,batch_size=2048)
 
 #input dims bi trebao biti 13
 #n_actions bi trebao biti 3
@@ -85,7 +99,7 @@ agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action,fc1_di
 #env._load_golf_ball()
 #time.sleep(.5)
 episode_length = 50
-num_of_episodes = 100000
+num_of_episodes = 20000
 scores = []
 actor_losses = []
 critic_losses = []
@@ -140,22 +154,25 @@ for episode in trange(num_of_episodes):
             next_desired_goals.append(next_observation['desired_goal'])
             
             
-            if episode > 30:
+            if episode > 50:
                 batch = agent.memory.sample()
-                al, cl, tl = agent.learn(batch)
-                als.append(al)
-                cls.append(cl)
-                tls.append(tl)
-               
+                al, cl, tl ,alpha,log_alpha= agent.learn(batch)
+                #wandb.log({"actor_loss": al, "critic_loss": cl, "temp_loss": tl})
             
+            time_step += 1
             if done:
                 break
-            time_step += 1
+            
             observation = next_observation
 
         score = np.sum(rewards)
         scores.append(score)
-        print(f"Episode:, {episode}, score: {score}, average score: {np.mean(scores[-100:],)}")
+        avg_score = np.mean(scores[-100:])
+        print(f"Episode:, {episode}, score: {score}, average score: {avg_score}")
+        
+        if episode > 50:
+            wandb.log({"score": avg_score,"actor_loss": al, "critic_loss": cl, "temp_loss": tl, "alpha": alpha, "log_alpha":log_alpha})
+        
         if (episode + 1 )% 100 == 0:
             test()
         
@@ -190,17 +207,19 @@ for episode in trange(num_of_episodes):
         #if episode > 1000 or np.mean(scores[-100:]) > -25 : #and np.mean(scores[-100:]) > -30:
         #    env.phase =1
   
-        if np.mean(scores[-10:]) > -25 :
-            env.difficulty = min(env.difficulty+0.05, 1.1)
-        elif np.mean(scores[-10:]) < -48 :
-            env.difficulty = max(env.difficulty-0.05, 0.9)
+       # if np.mean(scores[-10:]) > -25 :
+        #    env.difficulty = min(env.difficulty+0.05, 1.1)
+        #elif np.mean(scores[-10:]) < -48 :
+       #     env.difficulty = max(env.difficulty-0.05, 0.9)
 
-        if np.mean(scores[-20:]) > -10:
-            print("Naucio")
+        #if np.mean(scores[-20:]) > -10:
+           # print("Naucio")
+           # break
 
-        #if episode == 50:
-            
-
+        if episode == 3000:
+            env.phase = 2    
+        if episode == 5000:
+            env.phase = 3
 
         observations = []
         achieved_goals=[]
@@ -213,5 +232,4 @@ for episode in trange(num_of_episodes):
         
         #print(action)
 
-
-time.sleep(122)
+wandb.finish()

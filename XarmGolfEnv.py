@@ -17,7 +17,7 @@ class XarmRobotGolf():
                                     high=np.array([0.8,0.4,0.02],dtype=np.float32),)
         self.dt = self.time_step * 40
         self.action_space = spaces.Box(-1., 1., shape=(4,), dtype='float32')
-        self.phase = 2
+        self.phase = 1
         self.difficulty = 0.9
 
         # bullet setup
@@ -59,15 +59,18 @@ class XarmRobotGolf():
 
         # hole params
         self.hole_space = spaces.Box(low=np.array([0.9, -0.2, 0.02],dtype=np.float32)
-                                    ,high=np.array([1.0 ,0.2, 0.02],dtype=np.float32))
+                                    ,high=np.array([1.1 ,0.2, 0.02],dtype=np.float32))
         self.hole_default_pos = np.array([0.9,0.05,0.02])
         self.distance_threshold = 0.05
 
         # load goal
+        
         self._load_golf_hole()
         
 
         # ball params
+        self.golf_ball_space = spaces.Box(low=np.array([0.45, -0.1, 0.02],dtype=np.float32)
+                                        ,high=np.array([0.6 ,0.1, 0.02],dtype=np.float32))
         self.golf_ball_default_pos = [0.45,0,0.02]
         self.golf_ball_pos = self.golf_ball_default_pos
         
@@ -95,7 +98,17 @@ class XarmRobotGolf():
     def reset(self):
         #return obs
         self._reset_sim()
-        self._sample_goal()
+        self._reset_golf_hole()
+        if self.phase == 1:
+            #self._sample_goal()
+            #self._reset_golf_hole()
+            self._reset_golf_ball()
+        elif self.phase == 2:
+            self._sample_golf_ball()
+            #self._reset_golf_hole()
+        elif self.phase == 3:
+            self._sample_golf_ball()
+            self._sample_goal()
         
         return self._get_obs()
 
@@ -172,7 +185,7 @@ class XarmRobotGolf():
     def _reset_sim(self):
 
         self.reset_robot()
-        self._reset_golf_ball()
+        #self._reset_golf_ball()
         
     
     def _load_golf_ball(self):
@@ -219,7 +232,6 @@ class XarmRobotGolf():
         for i in range(1, self.arm_eef_index):
             states.append(self.physics_client.getJointState(self.xarm,i)[0])
        
-        
     
     def reset_robot(self):
         self.joint_init_pos = [0, 0.27050686544800806, -0.005340887396375177, -0.2711492861468919
@@ -229,18 +241,20 @@ class XarmRobotGolf():
         for i in range(16):
             self.physics_client.resetJointState(self.xarm,i,targetValue = self.joint_init_pos[i], targetVelocity = 0)
 
-       
-      
-
 
     def _reset_golf_ball(self):
+
         self.physics_client.resetBasePositionAndOrientation(self.golf_ball, self.golf_ball_default_pos, self.start_orientation)
     
+    def _sample_golf_ball(self):
+        
+        self.golf_ball_pos = np.array(self.golf_ball_space.sample())
+        self.physics_client.resetBasePositionAndOrientation(self.golf_ball, self.golf_ball_pos, self.start_orientation)
+
     def _reset_golf_hole(self):
         self.physics_client.resetBasePositionAndOrientation(self.hole,self.hole_default_pos,self.start_orientation)
         
     def setup_golf_course(self):
-        
         raise NotImplementedError
     
 
@@ -248,17 +262,8 @@ class XarmRobotGolf():
     # --------------
     def _sample_goal(self):
 
-    
-
-        if self.phase == 1:
-            self.hole_pos = np.array(self.hole_space.sample())
-            
-            self.phase = 0
-        elif self.phase == 2:
-            self.hole_pos = np.array(self.hole_space.sample())
-            
-
-        self.hole_pos[0]= self.difficulty
+        self.hole_pos = np.array(self.hole_space.sample())
+        #self.hole_pos[0]= self.difficulty
         self.physics_client.resetBasePositionAndOrientation(self.hole, self.hole_pos, self.startOrientation)
 
 

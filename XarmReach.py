@@ -22,9 +22,14 @@ class XarmRobotReach():
         self.reward_type = config['reward_type']
         self.start_pos = [0,0,0]
         self.start_orientation = p.getQuaternionFromEuler([0,0,0])
-        self.joint_init_pos = [0, -0.1, -0.08153217279952825, 
-                                0.09299669711139864, 1.067692645248743, 0.0004018824370178429, 
-                                1.1524205092196147, -0.0004991403332530034,0,0,0.9,0.9,0,0.9,0.9] + [0]*2
+        # self.joint_init_pos = [0, -0.1, -0.08153217279952825, 
+        #                         0.09299669711139864, 1.067692645248743, 0.0004018824370178429, 
+        #                         1.1524205092196147, -0.0004991403332530034,0,0,0.9,0.9,0,0.9,0.9] + [0]*2
+        self.joint_init_pos = [0, 0.27050686544800806, -0.005340887396375177, -0.2711492861468919
+                               , 0.4600086544592818, -0.003261038126179985, 0.46525864138699663
+                               , 0.0022592575465344170,0,0.9,0.9,0,0.9,0.9] + [0]*2
+        
+        
         self.gripper_base_default_pos = [0.40, 0., 0.4]
         self.max_vel = 1
         self.dt = self.time_step * 20
@@ -169,6 +174,9 @@ class XarmRobotReach():
         self._reset_robot()
 
     def _reset_robot(self):
+        tcp_state = p.getLinkState(self.xarm, self.tcp_index, computeLinkVelocity=1)
+        tcp_pos = np.array(tcp_state[0])
+
         for i in range(17):
             p.resetJointState(self.xarm,i,targetValue = self.joint_init_pos[i], targetVelocity = 0)
 

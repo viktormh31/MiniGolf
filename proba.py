@@ -1,4 +1,5 @@
 import time
+
 import numpy as np
 
 from SAC_with_temperature_v2 import Agent
@@ -6,11 +7,15 @@ import torch
 from XarmGolfEnv import XarmRobotGolf
 from XarmReach import XarmRobotReach
 from tqdm import trange
+import time
+import wandb
+
+ 
 
 #import matplotlib.pyplot as plt
 config = {
 
-    'GUI' : True,
+    'GUI' : False,
     'reward_type' : "sparse",
 }
 test_config = {
@@ -18,47 +23,71 @@ test_config = {
      'reward_type' : "sparse", 
 }
 
+wandb.init(
 
+    project = "Xarm-golf",
+    config = {
+        "lr_actor": 0.0001,
+        "lr_critic": 0.003,
+        "batch_size": 2048,
+        "nn_dims": 512,
+        "temperature": 0.3,
+        "episodes": 20000,
+        "entropy": -2,
+        "init weights": "Xavier_uniform_",
+        "optimizer": "AdamW",
+        "gamma": 0.95
+    },
+    id= 'test26'
+)  
 env =XarmRobotGolf(config)
-
-lr_actor = 0.001
-lr_critic = 0.001
-input_dims = 19
-obs_dims = 13
-n_actions = 3
+#test_env = XarmRobotGolf(test_config)
+lr_actor = 0.0001
+lr_critic = 0.003
+input_dims = 27
+obs_dims = 21
+n_actions = 4
 max_action = 1
+
+agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action,fc1_dim=512,fc2_dim=512,batch_size=2048,gamma=0.95)
+
 
 test_scores = []
 test_episode_count = 0
 
 def test():
-    test_env = XarmRobotEnv(test_config)
+    with torch.no_grad():
+        test_env = XarmRobotGolf(test_config)
+        test_env.phase = env.phase
+        #test_env.test_reset()
+        agent.evaluate_mode()
+        test_episode_range = 10 
+        for test_episode in range(test_episode_range):
+            test_observation = test_env.reset()
+            test_time_step = 0
+            test_score = 0
+            while test_time_step < 50:
+                test_obs = np.concatenate([test_observation['observation'],test_observation['achieved_goal'],test_observation['desired_goal']],axis=-1,dtype=np.float32) #  ili axis = 0
+                #obs_tensor = torch.from_numpy(obs).to(agent.actor.device)
+                test_action = agent.choose_action(test_obs,True)
+                test_next_observation, test_reward, test_done = test_env.step(test_action)
+                test_observation = test_next_observation
+                
+                test_score +=  test_reward
+                if test_done:
+                    break
+                test_time_step += 1
+                time.sleep(1./30)
+            test_scores.append(test_score)
+            print(f"Test Episode {len(test_scores)}, score - {test_score}")
+        agent.training_mode()
+        test_env.close()
+        print(f"Test 10 average score: {np.average(test_scores[-10:])}")
+        print(f"Test 100 average score: {np.average(test_scores[-100:])}")
 
-    test_episode_range = 1
-    for test_episode in range(test_episode_range):
-        test_observation = test_env.reset()
-        test_time_step = 0
-        test_score = 0
-        while test_time_step < 50:
-            test_obs = np.concatenate([test_observation['observation'],test_observation['achieved_goal'],test_observation['desired_goal']],axis=-1,dtype=np.float32) #  ili axis = 0
-            #obs_tensor = torch.from_numpy(obs).to(agent.actor.device)
-            test_action = agent.choose_action(test_obs)
-            test_next_observation, test_reward, test_done = env.step(test_action)
-            test_observation = test_next_observation
-            
-            test_score +=  test_reward
-            if test_done:
-                break
-            test_time_step += 1
-        print(f"Test Episode - score: {test_score}, average score: {np.average(test_scores[:100],)}")
-        
-    pass
-#plt.plot([0, 1, 2], [0, 1, 4])
-#plt.show()
 
 
 
-agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action)
 
 #input dims bi trebao biti 13
 #n_actions bi trebao biti 3
@@ -69,8 +98,8 @@ agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action)
 #env.make_goal(action)
 #env._load_golf_ball()
 #time.sleep(.5)
-episode_length = 40
-num_of_episodes = 100000
+episode_length = 50
+num_of_episodes = 20000
 scores = []
 actor_losses = []
 critic_losses = []
@@ -89,6 +118,9 @@ next_observations = []
 next_achieved_goals=[]
 next_desired_goals =[]
 
+als = []
+cls = []
+tls = []
 
 
 #plt.ioff()
@@ -111,12 +143,7 @@ for episode in trange(num_of_episodes):
                                             done,
                                             next_observation,
                                             1)
-            # agent.memory.episode_buffer.append(observation,
-            #                                 action,
-            #                                 reward,
-            #                                 done,
-            #                                 next_observation,
-            #                                 1)
+      
             observations.append(observation['observation'])
             achieved_goals.append(observation['achieved_goal'])
             desired_goals.append(observation['desired_goal'])
@@ -127,16 +154,11 @@ for episode in trange(num_of_episodes):
             next_desired_goals.append(next_observation['desired_goal'])
             
             
-            if episode > 100:
-                real_batch, her_batch = agent.memory.sample()
-                l = agent.learn(real_batch)
-                #actor_losses.append(l['actor_loss'].detach().numpy())
-                #critic_losses.append(l['critic_loss'].detach().numpy())
-                temperature_losses.append(l['temp_loss'].detach().numpy())
-                l = agent.learn(her_batch)
-                #actor_losses.append(l['actor_loss'].detach().numpy())
-                #critic_losses.append(l['critic_loss'].detach().numpy())
-                temperature_losses.append(l['temp_loss'].detach().numpy())
+            if episode > 50:
+                batch = agent.memory.sample()
+                al, cl, tl ,alpha,log_alpha= agent.learn(batch)
+                #wandb.log({"actor_loss": al, "critic_loss": cl, "temp_loss": tl})
+            
             time_step += 1
             if done:
                 break
@@ -145,46 +167,15 @@ for episode in trange(num_of_episodes):
 
         score = np.sum(rewards)
         scores.append(score)
-        print(f"Episode:, {episode}, score: {score}, average score: {np.mean(scores[-100:],)}")
+        avg_score = np.mean(scores[-100:])
+        print(f"Episode:, {episode}, score: {score}, average score: {avg_score}")
         
-        """
-        critic_losses = []
-
-        her_observations = agent.memory.episode_buffer.observations
-        her_achieved_goals = agent.memory.episode_buffer.achieved_goals
-        her_desired_goals = agent.memory.episode_buffer.desired_goals
-
-        her_obs = {
-            'observation': her_observations,
-            'achieved_goal': her_achieved_goals,
-            'desired_goal': her_desired_goals
-        }
-        her_actions = agent.memory.episode_buffer.actions
-        her_next_observations = agent.memory.episode_buffer.next_observations
-        her_next_achieved_goals = agent.memory.episode_buffer.next_achieved_goals
-        her_next_desired_goals = agent.memory.episode_buffer.next_desired_goals
-
-        her_next_obs = {
-            'observation': her_next_observations,
-            'achieved_goal': her_next_achieved_goals,
-            'desired_goal': her_next_desired_goals
-        }
-
-
-
-        end_achieved_episode_goal = observation['achieved_goal']
-        # das li ce raditi posto je jedan parametar np.array oblika(time_step, goal_dim) a drugi samo np.array(goal_dim)
-        her_rewards = env.compute_reward(her_obs['achieved_goal'],end_achieved_episode_goal)
-        her_dones = her_rewards + 1 #ish
-        agent.memory.her_buffer.append(her_obs,
-                                            her_actions,
-                                            her_rewards,
-                                            her_dones,
-                                            her_next_obs,
-                                            time_step)
-    
-        agent.memory.episode_buffer.reset_buffer()
-        """
+        if episode > 50:
+            wandb.log({"score": avg_score,"actor_loss": al, "critic_loss": cl, "temp_loss": tl, "alpha": alpha, "log_alpha":log_alpha})
+        
+        if (episode + 1 )% 100 == 0:
+            test()
+        
         end_achieved_episode_goal = achieved_goals[-1]
         for index in range(time_step):
 
@@ -200,8 +191,6 @@ for episode in trange(num_of_episodes):
                 'desired_goal': end_achieved_episode_goal
             }
             
-            
-            # das li ce raditi posto je jedan parametar np.array oblika(time_step, goal_dim) a drugi samo np.array(goal_dim)
             her_reward = env.compute_reward(achieved_goals[index],end_achieved_episode_goal)
             her_done = her_reward + 1 #ish
             agent.memory.her_buffer.append(her_obs,
@@ -215,10 +204,22 @@ for episode in trange(num_of_episodes):
 
 
 
-        if episode > 1000 or np.mean(scores[-100:]) > -25 : #and np.mean(scores[-100:]) > -30:
-            env.phase =1
+        #if episode > 1000 or np.mean(scores[-100:]) > -25 : #and np.mean(scores[-100:]) > -30:
+        #    env.phase =1
   
-        
+       # if np.mean(scores[-10:]) > -25 :
+        #    env.difficulty = min(env.difficulty+0.05, 1.1)
+        #elif np.mean(scores[-10:]) < -48 :
+       #     env.difficulty = max(env.difficulty-0.05, 0.9)
+
+        #if np.mean(scores[-20:]) > -10:
+           # print("Naucio")
+           # break
+
+        if episode == 3000:
+            env.phase = 2    
+        if episode == 5000:
+            env.phase = 3
 
         observations = []
         achieved_goals=[]
@@ -231,5 +232,4 @@ for episode in trange(num_of_episodes):
         
         #print(action)
 
-
-time.sleep(122)
+wandb.finish()

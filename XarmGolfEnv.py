@@ -33,7 +33,7 @@ class XarmRobotGolf():
         self.physics_client.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.physics_client.setGravity(0.0,0.0,-9.81)
         self.physics_client.setRealTimeSimulation(0)
-        self.physics_client.resetDebugVisualizerCamera(cameraDistance=0.7, cameraYaw=90, cameraPitch=-20, cameraTargetPosition=[1,0,0.4])
+        self.physics_client.resetDebugVisualizerCamera(cameraDistance=0.7, cameraYaw=90, cameraPitch=-89, cameraTargetPosition=[1,0,0.4])
 
 
          # load plane
@@ -171,10 +171,10 @@ class XarmRobotGolf():
         
         # observation
         obs = np.concatenate((
-                    tcp_pos,tcp_rot, tcp_vel, self.golf_ball_pos, relative_ball_vel,ball_orientation, distance
+                    tcp_pos,tcp_rot, tcp_vel, self.golf_ball_pos, distance
         ),axis= -1)
         #obs = np.concatenate((obs,distance),axis =-1)
-
+        # proverena kombinacija: tcp_pos,tcp_rot, tcp_vel, self.golf_ball_pos, relative_ball_vel,ball_orientation, distance
         return {
             'observation': obs.copy(),
             'achieved_goal': np.squeeze(self.golf_ball_pos),

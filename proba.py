@@ -38,14 +38,14 @@ wandb.init(
         "optimizer": "AdamW",
         "gamma": 0.95
     },
-    id= 'test26'
+    id= 'test29 - only positional parameters longer'
 )  
 env =XarmRobotGolf(config)
 #test_env = XarmRobotGolf(test_config)
 lr_actor = 0.0001
 lr_critic = 0.003
-input_dims = 27
-obs_dims = 21
+input_dims = 21
+obs_dims = 15
 n_actions = 4
 max_action = 1
 
@@ -99,7 +99,7 @@ def test():
 #env._load_golf_ball()
 #time.sleep(.5)
 episode_length = 50
-num_of_episodes = 20000
+num_of_episodes = 30000
 scores = []
 actor_losses = []
 critic_losses = []
@@ -218,7 +218,7 @@ for episode in trange(num_of_episodes):
 
         if episode == 3000:
             env.phase = 2    
-        if episode == 5000:
+        if episode == 10000:
             env.phase = 3
 
         observations = []

@@ -1,5 +1,5 @@
 import os
-import gymnasium as gym
+#import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,7 +8,9 @@ import numpy as np
 from memory import HerBuffer
 #import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
-
+from ultralytics import YOLO
+import cv2 as cv
+import time
 
 #https://arxiv.org/pdf/1812.05905 - SAC with automatic entropy adjustment
 
@@ -155,6 +157,12 @@ class Agent(object):
         self.initialize_weights(self.critic_1)
         self.initialize_weights(self.critic_2)
         
+        self.model = YOLO('models/best.pt')
+        self.picture_height = 640
+        self.picture_width = 640
+
+        self.last_position = None
+        self.last_time = None
 
     
         self.update_network_params(1)
@@ -170,7 +178,6 @@ class Agent(object):
         for eval_param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
             target_param.data.copy_(tau*eval_param + (1.0-tau)*target_param.data)
             
-
     def initialize_weights(self,model):
         for layer in model.modules():
             if isinstance(layer, nn.Linear):
@@ -180,19 +187,19 @@ class Agent(object):
 
     def learn(self,batch):
 
-        observations = batch['observations']
-        achieved_goals = batch['achieved_goals']
-        desired_goals = batch['desired_goals']
-        actions = batch['actions']
-        rewards = batch['rewards']
-        dones = batch['dones']
-        next_observations = batch['next_observations']
-        next_achieved_goals = batch['next_achieved_goals']
-        next_desired_goals = batch['next_desired_goals']
+        observations_tensor = batch['observations']
+        achieved_goals_tensor = batch['achieved_goals']
+        desired_goals_tensor = batch['desired_goals']
+        actions_tensor = batch['actions']
+        rewards_tensor = batch['rewards']
+        dones_tensor = batch['dones']
+        next_observations_tensor = batch['next_observations']
+        next_achieved_goals_tensor = batch['next_achieved_goals']
+        next_desired_goals_tensor = batch['next_desired_goals']
        
         # Conversion to tensors 
 
-    
+        """
         observations_tensor = torch.from_numpy(observations).to(self.actor.device)
         achieved_goals_tensor = torch.from_numpy(achieved_goals).to(self.actor.device)
         desired_goals_tensor = torch.from_numpy(desired_goals).to(self.actor.device)
@@ -202,7 +209,7 @@ class Agent(object):
         next_observations_tensor = torch.from_numpy(next_observations).to(self.actor.device)
         next_achieved_goals_tensor = torch.from_numpy(next_achieved_goals).to(self.actor.device)
         next_desired_goals_tensor = torch.from_numpy(next_desired_goals).to(self.actor.device)
-    
+        """
         obs = torch.concat((observations_tensor, achieved_goals_tensor, desired_goals_tensor),dim=1)
         obs_ = torch.concat((next_observations_tensor, next_achieved_goals_tensor, next_desired_goals_tensor),dim=1)
 
@@ -276,17 +283,168 @@ class Agent(object):
 
         return actor_loss,critic_loss,temperature_loss, self.temperature, self.log_temperature
 
-        
-
-
     def evaluate_mode(self):
         self.actor.eval()
 
     def training_mode(self):
         self.actor.train()
 
-    def choose_action(self,obs,reparametrization = False):
-        obs = torch.from_numpy(obs).to(self.actor.device)
-        actions, _ = self.actor.sample(obs,reparametrization)
+    def choose_action(self,obs,time_step,reparametrization = False):
 
-        return actions.cpu().detach().numpy()
+
+        processed_obs = self.process_observation(obs,time_step)
+        state = torch.squeeze(torch.concat([processed_obs['observation'],processed_obs['achieved_goal'],processed_obs['desired_goal']],dim=-1)).to(self.actor.device) #,dtype=np.float32)
+
+        #obs = torch.from_numpy(obs).to(self.actor.device)
+        actions, _ = self.actor.sample(state,reparametrization)
+
+        return actions
+   
+    def process_observation(self,obs,time_step):
+
+        tcp_pos = obs['robot_obs']['tcp_pos'].to(self.actor.device)
+        tcp_rot = obs['robot_obs']['tcp_rot'].to(self.actor.device)
+        tcp_vel = obs['robot_obs']['tcp_vel'].to(self.actor.device)
+        bgr_image = obs['camera_image']
+        golf_ball_pos, golf_hole_pos, golf_ball_speed = self.process_image(bgr_image,time_step)
+
+        observation = torch.concat((
+                     tcp_pos,tcp_rot, tcp_vel,golf_ball_speed,
+         ),dim= -1).to(device=self.actor.device)
+        
+
+        return {
+            'observation': observation,
+            'achieved_goal': golf_ball_pos,
+            'desired_goal': golf_hole_pos
+        }                                               
+        
+    def process_image(self, img,time_step):
+        """
+        label_number :
+            - 0.0  --> golf ball
+            - 1.0  --> golf hole
+
+        !!!!! ubaci logiku ako ne pronadju u datom framu loptu ili rupu koje koordinate da im zada! !!!!!
+        """
+       # bgr_image = np.reshape(img[2], (self.picture_height, self.picture_width, -1))[:, :, :3]  # Extract RGB
+        ball_found = False
+        hole_found = False
+
+        rgb_image = cv.cvtColor(img,cv.COLOR_BGR2RGB)
+        start = time.time()
+        results = self.model(rgb_image, verbose = False)
+        end = time.time()
+        processing_time = start - end
+        #print(1000*(end - start))
+        #img = results[0].plot()
+        #cv.imshow("Live Tracking",img)
+        #cv.waitKey(1)
+        for r in results:
+            #print(r.boxes)
+            for detected_object in r.boxes.data:
+                #print(detected_object)
+                label_number = detected_object[-1]
+                coords = detected_object[:4]
+                real_coords = self.get_coords_from_yolo(coords)
+
+                if label_number == 0.0:
+                    golf_ball_coords = real_coords
+                    ball_found = True
+                elif label_number == 1.0:
+                    golf_hole_coords = real_coords
+                    hole_found = True
+
+        #cv.imshow("Live Tracking", img)
+
+        if not ball_found:
+            golf_ball_coords = torch.squeeze(self.memory.real_buffer.return_achieved_goals(1))
+        else:
+            golf_ball_coords = torch.cat((golf_ball_coords,torch.tensor([0.02]).to(self.actor.device)))
+
+        if not hole_found:
+            golf_hole_coords = torch.squeeze(self.memory.real_buffer.return_desired_goals(1))
+        else:
+            golf_hole_coords = torch.cat((golf_hole_coords,torch.tensor([0.02]).to(self.actor.device)))
+        
+
+        golf_ball_speed = self.calculate_speed(golf_ball_coords, time_step)
+
+
+        return golf_ball_coords, golf_hole_coords, golf_ball_speed
+    
+
+    def calculate_speed(self,current_pos, current_step):
+        if self.last_position is None or self.last_time is None:
+            speed = torch.tensor([0,0,0]).to(self.actor.device)
+        else:
+            delta_pos = current_pos- self.last_position
+            delta_t = current_step - self.last_time
+            speed = (delta_pos / delta_t) if delta_t > 0 else torch.tensor([0,0,0]).to(self.actor.device)
+
+        
+
+        return speed
+
+
+
+    def get_coords_from_yolo(self,yolo_coords):
+
+        y1,x1,y2,x2 = yolo_coords
+        real_x1 = (x1 + x2)/640
+        real_y1 = (y1 + y2)/640 - 1
+        
+        return torch.tensor([real_x1.round(decimals=2),real_y1.round(decimals=2)]).to(self.actor.device)
+
+    def real_memory_append(self,obs,action,reward,done,next_obs,time_step,size_of_append):
+        
+        processed_obs = self.process_observation(obs,time_step)
+        self.last_position = processed_obs['achieved_goal']
+        self.last_time = time_step
+        processed_next_obs = self.process_observation(next_obs,time_step + 1)
+        self.memory.real_buffer.append(processed_obs,action,reward,done,processed_next_obs,size_of_append)
+
+        return 0
+
+    def her_memory_append(self,episode_length,her_rewards,her_dones):
+        """
+        Prosledjujemo duzinu epizode: episode_length, rewards i dones dobijene od env-a.
+        Uzimamo poslednjih (episode_length) time stepova iz  real_buffera, pravimo her_desired_goals
+        tensor odgovarajuceg oblika, menjamo desired_goals iz realbuffera i to appendujemo na her_buffer
+        
+        
+        """
+        episode_params = self.memory.real_buffer.return_episode(episode_length)
+
+        her_desired_goal = self.memory.real_buffer.return_achieved_goals(1)
+        her_desired_goals = her_desired_goal.repeat(episode_length,1)
+
+        her_obs = {
+                    'observation': episode_params['obs']['observation'],
+                    'achieved_goal': episode_params['obs']['achieved_goal'],
+                    'desired_goal': her_desired_goals,
+        }
+
+        her_next_obs = {
+                    'observation': episode_params['next_obs']['next_observation'],
+                    'achieved_goal': episode_params['next_obs']['next_achieved_goal'],
+                    'desired_goal': her_desired_goals,
+        }
+
+        self.memory.her_buffer.append(her_obs,
+                                      episode_params['actions'],
+                                      her_rewards,
+                                      her_dones,
+                                      her_next_obs,
+                                      episode_length)
+
+
+        
+    """
+    1. skontaj da li procesiranje obs-a ide u np ili tensor
+    2. napravi metodu za procesiranje slike tako da vraca koordinate lopte i rupe to tim lable iz yoloa
+    3. preradi u proba.py da u loopu za epizodu upisivanje u memoriju agenta ide preko njegovih metoda
+    *4. probaj da napravis pracenje brzine preko slike
+
+    """
+

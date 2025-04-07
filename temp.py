@@ -1,155 +1,55 @@
-import numpy as np
+
 import torch
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
 
 
+x = torch.tensor([1,2,3])
 
 
+y = x.repeat(5,1)
+ball_positions = torch.tensor([
+    [1.0, 2.0, 3.0],
+    [1.02, 2.01, 3.03],
+    [0.95, 1.98, 2.97],
+    [1.1, 2.1, 3.1],
+    [0.9, 1.9, 2.9],
+    [1.05, 2.04, 3.02],
+    [1.06, 2.06, 3.07],
+    [1.00, 2.00, 3.00],
+    [1.03, 2.02, 3.01],
+    [0.96, 1.99, 2.98]
+])
 
-# x = [0,1,2,3,4,5,6,7,8,9]
-# y = [11,23,5,123,75,66,13,34,77,9]
-
-
-# plt = pg.plot()
-# plt.showGrid(x=True,y=True)
-# plt.addLegend()
-# plt.setLable('left', 'Rewards', units = 'y')
-
-# plt.setLable('bottom', 'Episodes', units = 'e')
-
-
-
-# plt.setXRange(0,10)
-
-# plt.setYRange(0,100)
-
-# plt.setWindowTitle("Title")
-
-# line1 = plt.plot(x,y,pen = 'green', symbor= 'x', symbolPen = 'red', symbolBrush = 0.2, name = 'reward')
+n = torch.tensor([2,2,2])
+y[2] = n
+print(y,y.shape)
+print(x,x.shape)
+#print(y[-1])
 
 
+distance = torch.norm(x - ball_positions, p=2,dim=1)
+#reward = torch.tensor((distance < 1)) - 1.
+#done = reward + 1
 
-# # main method
-# if __name__ == '__main__':
-     
-#     # importing system
-#     import sys
-     
-#     # Start Qt event loop unless running in interactive mode or using 
-#     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-#         QtGui.QApplication.instance().exec_()
+print(distance)
 
+def is_ball_near_hole(ball_positions: torch.Tensor, hole_pos: torch.Tensor, threshold: float = 0.05) -> torch.Tensor:
+    """
+    Checks if each ball position in a batch of 10 positions is within the threshold distance of the hole.
+    
+    Args:
+    - ball_positions: Tensor of shape (10, 3), representing 10 (x, y, z) positions.
+    - hole_pos: Tensor of shape (3,), representing a single (x, y, z) position.
+    - threshold: Distance threshold (default: 0.05).
+    
+    Returns:
+    - A boolean tensor of shape (10,), where True means the ball is within the threshold distance.
+    """
+    distances = torch.norm(ball_positions - hole_pos, p=2, dim=1)  # Compute distances for all 10 positions
+    return torch.where(distances <= threshold, torch.tensor(0), torch.tensor(-1))
 
+# Example usage:
 
+hole_position = torch.tensor([1.0, 2.0, 3.0])
 
-
-
-
-import pyqtgraph as pg
-from PyQt5 import QtWidgets, QtCore
-from random import randint
-class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        # Temperature vs time dynamic plot
-        self.plot_graph = pg.PlotWidget()
-        self.setCentralWidget(self.plot_graph)
-        self.plot_graph.setBackground("w")
-        pen = pg.mkPen(color=(255, 0, 0))
-        self.plot_graph.setTitle("Losses per episode", color="b", size="20pt")
-        styles = {"color": "red", "font-size": "20px"}
-        self.plot_graph.setLabel("left", "Losses", **styles)
-        self.plot_graph.setLabel("bottom", "Episodes", **styles)
-        self.plot_graph.addLegend()
-        self.plot_graph.showGrid(x=True, y=True)
-        self.plot_graph.setYRange(-100, 100)
-        self.episodes = [0,1,2,3,4,]
-        self.actor_losses= [1,4,7,11,13]
-        self.critic_losses= [2,-2,-5,12,33]
-        self.temp_losses= [1,2,3,4,5]
-        
-        # Get a line reference
-        self.actor_pen = pg.mkPen(color= (255,0,0))
-        self.actor_line = self.plot_graph.plot(
-            self.episodes,
-            self.actor_losses,
-            name="Actor losses",
-            pen=self.actor_pen,
-            symbol="d",
-            symbolSize=5,
-            symbolBrush="b",
-        )
-        self.critic_pen = pg.mkPen(color= (0,255,0))
-        self.critic_line = self.plot_graph.plot(
-            self.episodes,
-            self.critic_losses,
-            name="Critic losses",
-            pen=self.critic_pen,
-            symbol="d",
-            symbolSize=5,
-            symbolBrush="g",
-        )
-        self.temp_pen = pg.mkPen(color= (0,0,255))
-        self.temp_line = self.plot_graph.plot(
-            self.episodes,
-            self.temp_losses,
-            name="Temp losses",
-            pen=self.temp_pen,
-            symbol="d",
-            symbolSize=5,
-            symbolBrush="r",
-        )
-
-
-
-        ### Add a timer to simulate new temperature measurements
-        self.timer = QtCore.QTimer()
-        self.timer.setInterval(300)
-        self.timer.timeout.connect(self.update_plot(self.episodes,self.actor_losses,self.critic_losses,self.temp_losses))
-        self.timer.start()
-        #self.plot_all(self.episodes,self.actor_losses,self.critic_losses,self.temp_losses)
-
-    def update_plot(self,actor_loss,critic_loss,temp_loss):
-        #self.time = self.time[1:]
-        #self.time.append(self.time[-1] + 1)
-        #self.temperature = self.temperature[1:]
-        #self.temperature.append(randint(20, 40))
-        #self.line.setData(self.time, self.temperature)
-        self.episodes.append(len(self.episodes))
-        self.actor_losses.append(actor_loss)
-        self.critic_losses.append(critic_loss)
-        self.temp_losses.append(temp_loss)
-
-        self.plot_all(self.episodes, self.actor_losses, self.critic_losses, self.temp_losses)
-
-
-
-
-    def loss_plot(self,name,episodes,actor_losses,pen,brush):
-        self.plot_graph.plot(
-            episodes,
-            actor_losses,
-            name=name,
-            pen=pen,
-            symbol="d",
-            symbolSize=5,
-            symbolBrush=brush,
-        )
-
-    def plot_all(self,episodes, actor_losses, critic_losses, temp_losses):
-        
-        self.loss_plot('Actor losses', episodes, actor_losses, self.actor_pen,'b')
-        self.loss_plot('Critic losses', episodes, critic_losses, self.critic_pen,'g')
-        self.loss_plot('Temp losses', episodes, temp_losses, self.temp_pen,'r')
-
-
-
-app = QtWidgets.QApplication([])
-main = MainWindow()
-main.show()
-app.exec()
-
-main.update_plot(-50,22,45)
-
+result = is_ball_near_hole(ball_positions, hole_position)
+print(result) 

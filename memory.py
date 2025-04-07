@@ -1,6 +1,6 @@
 import numpy as np
-
-
+import torch
+DEVICE = 'cuda'
 class HerBuffer():
     def __init__(self,batch_size,batch_ratio,max_episode_timesteps, obs_dims, n_actions,goal_dim,max_buffer_size = 1e6) -> None:
         self.batch_size = batch_size
@@ -19,7 +19,7 @@ class HerBuffer():
         real_batch = self.real_buffer.sample()
         her_batch = self.her_buffer.sample()
 
-        combined_batch = {key: np.concatenate([real_batch[key], her_batch[key]],axis=0) for key in real_batch}
+        combined_batch = {key: torch.cat([real_batch[key], her_batch[key]],dim=0) for key in real_batch}
         
         return combined_batch
 
@@ -29,9 +29,20 @@ class BaseBuffer():
         self.max_size = max_size
         self.batch_size = batch_size
         self.counter = 0
-        self.rng = np.random.default_rng()
+        #self.rng = np.random.default_rng()
 
-        self.observations = np.zeros((max_size,input_dims), dtype= np.float32)
+        self.observations = torch.zeros((max_size, input_dims), dtype=torch.float32, device=DEVICE)
+        self.achieved_goals = torch.zeros((max_size, goal_dim), dtype=torch.float32, device=DEVICE)
+        self.desired_goals = torch.zeros((max_size, goal_dim), dtype=torch.float32, device=DEVICE)
+        self.actions = torch.zeros((max_size, n_actions), dtype=torch.float32, device=DEVICE)
+        self.rewards = torch.zeros((max_size,), dtype=torch.int32, device=DEVICE)
+        self.dones = torch.zeros((max_size,), dtype=torch.int32, device=DEVICE)
+        self.next_observations = torch.zeros((max_size, input_dims), dtype=torch.float32, device=DEVICE)
+        self.next_achieved_goals = torch.zeros((max_size, goal_dim), dtype=torch.float32, device=DEVICE)
+        self.next_desired_goals = torch.zeros((max_size, goal_dim), dtype=torch.float32, device=DEVICE)
+        
+        """
+        self.observations = torch.zeros(max_size,input_dims), dtype= np.float32)
         self.achieved_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
         self.desired_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
         self.actions = np.zeros((max_size,n_actions), dtype= np.float32)
@@ -41,9 +52,14 @@ class BaseBuffer():
         self.next_observations = np.zeros((max_size,input_dims), dtype= np.float32)
         self.next_achieved_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
         self.next_desired_goals = np.zeros((max_size,goal_dim), dtype= np.float32)
+        """
+        
     
     def append(self,obs,action,reward,done,next_obs,size_of_append):
         
+        index = self.counter % self.max_size
+
+
         observation = obs["observation"]
         achieved_goal = obs["achieved_goal"]
         desired_goal = obs["desired_goal"]
@@ -52,8 +68,7 @@ class BaseBuffer():
         next_achieved_goal = next_obs["achieved_goal"]
         next_desired_goal = next_obs["desired_goal"]
 
-        index = self.counter % self.max_size
-
+       
         if size_of_append == 1:
             self.observations[index] = observation
             self.achieved_goals[index] = achieved_goal
@@ -66,7 +81,7 @@ class BaseBuffer():
             self.next_desired_goals[index] = next_desired_goal
             
         else:
-            indices = np.arange(index, index + size_of_append) % self.max_size
+            indices = torch.arange(index, index + size_of_append) % self.max_size
             print(size_of_append)
             self.observations[indices] = observation[0:size_of_append]
             self.achieved_goals[indices] = achieved_goal[0:size_of_append]
@@ -111,6 +126,39 @@ class BaseBuffer():
         self.next_achieved_goals.fill(0)
         self.next_desired_goals.fill(0)
 
+    def return_episode(self,time_steps):
+
+        index = self.counter % self.max_size
+        indices = np.arange(index-time_steps, index) % self.max_size
+
+        return {
+            'obs' :{
+                    'observation': self.observations[indices],
+                    'achieved_goal': self.achieved_goals[indices],
+                    'desired_goal': self.desired_goals[indices],
+
+                    },
+            'actions': self.actions[indices],
+            'rewards': self.rewards[indices],
+            'dones': self.dones[indices],
+            'next_obs' :{
+                        'next_observation': self.next_observations[indices],
+                        'next_achieved_goal': self.next_achieved_goals[indices],
+                        'next_desired_goal': self.next_desired_goals[indices],
+                        }
+        }      
+
+    def return_achieved_goals(self,episode_length):
+        index = self.counter % self.max_size
+        indices = np.arange(index-episode_length, index) % self.max_size
+
+        return self.achieved_goals[indices]
+    
+    def return_desired_goals(self,episode_length):
+        index = self.counter % self.max_size
+        indices = np.arange(index-episode_length, index) % self.max_size
+
+        return self.desired_goals[indices]
 
 
 

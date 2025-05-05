@@ -14,6 +14,8 @@ class XarmRobotGolf():
     def __init__(self, config):
         self.time_step = 1./240
         
+        self.config = config
+
         # env params
         self.startOrientation = p.getQuaternionFromEuler([0,0,0])
         self.pos_space = spaces.Box(low=np.array([0.35,-0.4,0.02],dtype=np.float32),
@@ -27,9 +29,9 @@ class XarmRobotGolf():
 
         # bullet setup
         
-        if config['GUI']:
+        if self.config['GUI']:
             self.physics_client = bc.BulletClient(p.GUI)
-            self.physics_client.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=0, cameraPitch=-10, cameraTargetPosition=[0.5,0,0.2])
+            #self.physics_client.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=0, cameraPitch=-10, cameraTargetPosition=[0.5,0,0.2])
            
         else:
             self.physics_client = bc.BulletClient(p.DIRECT)
@@ -38,7 +40,7 @@ class XarmRobotGolf():
         self.physics_client.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.physics_client.setGravity(0.0,0.0,-9.81)
         self.physics_client.setRealTimeSimulation(0)
-        self.physics_client.resetDebugVisualizerCamera(cameraDistance=0.7, cameraYaw=90, cameraPitch=-89, cameraTargetPosition=[1,0,0.4])
+        #self.physics_client.resetDebugVisualizerCamera(cameraDistance=0.7, cameraYaw=90, cameraPitch=-89, cameraTargetPosition=[1,0,0.4])
 
         #camera settings
         self.cam_width, self.cam_height = 640, 640
@@ -48,8 +50,8 @@ class XarmRobotGolf():
         far = 10
 
         # Camera position and orientation
-        cam_eye = [1, 0, 1.75]  # Camera position
-        cam_target = [.99,0, 0]  # Where the camera is looking
+        cam_eye = [0.8, 0, .8]  # Camera position
+        cam_target = [0.79,0, 0]  # Where the camera is looking
         cam_up = [0., 0., 1]  # "Up" direction
         self.view_matrix = p.computeViewMatrix(cam_eye, cam_target, cam_up)
         self.proj_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
@@ -156,12 +158,7 @@ class XarmRobotGolf():
 
     #  RobotEnv methods
     # ------------------
-
-    # current_gripper_base_value = np.array(p.getJointState(self.xarm, self.gripper_base_index)[0])
-    #     new_gripper_base_value = current_gripper_base_value = action[4] * self.max_vel *self.dt
-    #     new_gripper_base_value = np.clip(new_gripper_base_value,)
-
-
+    
     def _set_action(self,action):
         assert action.shape == (4,), 'action shape error'
         action = action.cpu().detach().numpy()
@@ -313,6 +310,14 @@ class XarmRobotGolf():
 
     def close(self):
         self.physics_client.disconnect()
+
+    def connect(self):
+        if self.config['GUI']:
+            self.physics_client = bc.BulletClient(p.GUI)
+            #self.physics_client.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=0, cameraPitch=-10, cameraTargetPosition=[0.5,0,0.2])
+           
+        else:
+            self.physics_client = bc.BulletClient(p.DIRECT)
 
     def test_reset(self):
         p.resetSimulation()

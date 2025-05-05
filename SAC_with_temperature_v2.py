@@ -18,7 +18,7 @@ import time
 DEVICE = 'cuda'
 
 class CriticNetwork(nn.Module):
-    def __init__(self,input_dims, n_actions, fc1_dims, fc2_dims, lr_critic):
+    def __init__(self,input_dims, n_actions, fc1_dims, fc2_dims, lr_critic,name):
         super(CriticNetwork,self).__init__()
         self.input_dims = input_dims
         self.n_actions = n_actions
@@ -44,6 +44,10 @@ class CriticNetwork(nn.Module):
 
         self.optimizer = optim.AdamW(self.parameters(),lr=lr_critic)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
+
+        
+        self.checkpoint_file = os.path.join('models/agent/checkpoint',f"{name}.pth")
+
         self.to(self.device)
 
     def forward(self,state,action):
@@ -86,6 +90,10 @@ class ActorNetwork(nn.Module):
             
         self.optimizer = optim.AdamW(self.parameters(),lr=lr_actor)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
+        
+        self.checkpoint_file = os.path.join('models/agent/checkpoint', "actor.pth")
+
+        
         self.to(self.device)
         
         
@@ -142,10 +150,10 @@ class Agent(object):
 
 
         self.actor = ActorNetwork(self.input_dims,self.n_actions,self.max_action, fc1_dim,fc2_dim,lr_actor)
-        self.critic_1 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic)
-        self.target_critic_1 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic)
-        self.critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic)
-        self.target_critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic)
+        self.critic_1 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"critic_1")
+        self.target_critic_1 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"target_critic_1")
+        self.critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"critic_2")
+        self.target_critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"target_critic_2")
 
 
         self.target_entropy = -2 #self.n_actions
@@ -157,7 +165,7 @@ class Agent(object):
         self.initialize_weights(self.critic_1)
         self.initialize_weights(self.critic_2)
         
-        self.model = YOLO('models/best.pt')
+        self.model = YOLO('models/golf_recognition_yolov8.pt').to(self.actor.device)
         self.picture_height = 640
         self.picture_width = 640
 
@@ -196,20 +204,7 @@ class Agent(object):
         next_observations_tensor = batch['next_observations']
         next_achieved_goals_tensor = batch['next_achieved_goals']
         next_desired_goals_tensor = batch['next_desired_goals']
-       
-        # Conversion to tensors 
-
-        """
-        observations_tensor = torch.from_numpy(observations).to(self.actor.device)
-        achieved_goals_tensor = torch.from_numpy(achieved_goals).to(self.actor.device)
-        desired_goals_tensor = torch.from_numpy(desired_goals).to(self.actor.device)
-        actions_tensor = torch.from_numpy(actions).to(self.actor.device)
-        rewards_tensor = torch.from_numpy(rewards).to(self.actor.device).squeeze()
-        dones_tensor = torch.from_numpy(dones).to(self.actor.device).squeeze()
-        next_observations_tensor = torch.from_numpy(next_observations).to(self.actor.device)
-        next_achieved_goals_tensor = torch.from_numpy(next_achieved_goals).to(self.actor.device)
-        next_desired_goals_tensor = torch.from_numpy(next_desired_goals).to(self.actor.device)
-        """
+    
         obs = torch.concat((observations_tensor, achieved_goals_tensor, desired_goals_tensor),dim=1)
         obs_ = torch.concat((next_observations_tensor, next_achieved_goals_tensor, next_desired_goals_tensor),dim=1)
 
@@ -227,15 +222,9 @@ class Agent(object):
             target_values_next_states = torch.min(target_values_next_states_1,target_values_next_states_2)  - self.temperature* log_probs
             
             q_hat = rewards_tensor + self.gamma*(1-dones_tensor)*(target_values_next_states) # target_values_next_states and without temp*log_probs if 2 critics
-            #skloni gradijent sa q_hat
-
-
-        
-
-        #proveri koji gradijent se koristi
+           
         critic_loss_1 = F.mse_loss(old_critic_values_1,q_hat)
         critic_loss_2 = F.mse_loss(old_critic_values_2,q_hat)
-
         critic_loss = critic_loss_1 + critic_loss_2
 
         self.critic_1.optimizer.zero_grad()
@@ -251,33 +240,22 @@ class Agent(object):
         critic_values_2 = self.critic_2.forward(obs,new_actions)
         critic_values = torch.min(critic_values_1,critic_values_2).squeeze()
 
-        
         log_probs_temp = self.temperature * log_probs
-        
-
-        
-        actor_loss = log_probs_temp - critic_values # critic_value if using 2 critics
+    
+        actor_loss = log_probs_temp - critic_values
         actor_loss = torch.mean(actor_loss)
         self.actor.optimizer.zero_grad()
         actor_loss.backward()
         self.actor.optimizer.step()
 
         #-------Temperature network update-------#
-        #self.temperature = torch.exp(self.log_temperature)
-        #new_actions, log_probs = self.actor.sample(obs,reparametrization=False)
-        #with torch.no_grad():
-        #loss = log_probs + self.target_entropy
-
+      
         log_probs = log_probs.detach()
         temperature_loss =-1*(self.log_temperature *(log_probs + self.target_entropy)).mean()
         self.temperature_optimizer.zero_grad()
         temperature_loss.backward()
         self.temperature_optimizer.step()
         self.temperature = torch.exp(self.log_temperature)
-
-        #self.actor_losses.append(actor_loss)
-        #self.critic_losses.append(critic_loss)
-        #self.temperature_losses.append(temperature_loss)
 
         self.update_network_params()
 
@@ -291,11 +269,9 @@ class Agent(object):
 
     def choose_action(self,obs,time_step,reparametrization = False):
 
-
         processed_obs = self.process_observation(obs,time_step)
         state = torch.squeeze(torch.concat([processed_obs['observation'],processed_obs['achieved_goal'],processed_obs['desired_goal']],dim=-1)).to(self.actor.device) #,dtype=np.float32)
 
-        #obs = torch.from_numpy(obs).to(self.actor.device)
         actions, _ = self.actor.sample(state,reparametrization)
 
         return actions
@@ -338,7 +314,7 @@ class Agent(object):
         processing_time = start - end
         #print(1000*(end - start))
         #img = results[0].plot()
-        #cv.imshow("Live Tracking",img)
+        #cv.imshow("Live Tracking",rgb_image)
         #cv.waitKey(1)
         for r in results:
             #print(r.boxes)
@@ -355,17 +331,18 @@ class Agent(object):
                     golf_hole_coords = real_coords
                     hole_found = True
 
-        #cv.imshow("Live Tracking", img)
+        #cv.imshow("Live Tracking", rgb_image)
+
 
         if not ball_found:
             golf_ball_coords = torch.squeeze(self.memory.real_buffer.return_achieved_goals(1))
         else:
-            golf_ball_coords = torch.cat((golf_ball_coords,torch.tensor([0.02]).to(self.actor.device)))
+            golf_ball_coords = torch.cat((golf_ball_coords,torch.tensor([0.02],device=self.actor.device)))
 
         if not hole_found:
             golf_hole_coords = torch.squeeze(self.memory.real_buffer.return_desired_goals(1))
         else:
-            golf_hole_coords = torch.cat((golf_hole_coords,torch.tensor([0.02]).to(self.actor.device)))
+            golf_hole_coords = torch.cat((golf_hole_coords,torch.tensor([0.02], device= self.actor.device)))
         
 
         golf_ball_speed = self.calculate_speed(golf_ball_coords, time_step)
@@ -373,10 +350,9 @@ class Agent(object):
 
         return golf_ball_coords, golf_hole_coords, golf_ball_speed
     
-
     def calculate_speed(self,current_pos, current_step):
         if self.last_position is None or self.last_time is None:
-            speed = torch.tensor([0,0,0]).to(self.actor.device)
+            speed = torch.tensor([0,0,0], device= self.actor.device)
         else:
             delta_pos = current_pos- self.last_position
             delta_t = current_step - self.last_time
@@ -386,16 +362,13 @@ class Agent(object):
 
         return speed
 
-
-
     def get_coords_from_yolo(self,yolo_coords):
-
         y1,x1,y2,x2 = yolo_coords
-        real_x1 = (x1 + x2)/640
-        real_y1 = (y1 + y2)/640 - 1
-        
-        return torch.tensor([real_x1.round(decimals=2),real_y1.round(decimals=2)]).to(self.actor.device)
+        real_x1 = (x1 + x2)*0.92376/(2*640) + 0.3381
+        real_y1 = (y1 + y2)*0.92376/(2*640) -0.46188
 
+        return torch.tensor([real_x1.round(decimals=4),real_y1.round(decimals=4)]).to(self.actor.device)
+    
     def real_memory_append(self,obs,action,reward,done,next_obs,time_step,size_of_append):
         
         processed_obs = self.process_observation(obs,time_step)
@@ -438,13 +411,26 @@ class Agent(object):
                                       her_next_obs,
                                       episode_length)
 
+    def save_models(self, suffix=""):
+        print('... saving models ...')
 
-        
-    """
-    1. skontaj da li procesiranje obs-a ide u np ili tensor
-    2. napravi metodu za procesiranje slike tako da vraca koordinate lopte i rupe to tim lable iz yoloa
-    3. preradi u proba.py da u loopu za epizodu upisivanje u memoriju agenta ide preko njegovih metoda
-    *4. probaj da napravis pracenje brzine preko slike
+        torch.save(self.actor.state_dict(), self._with_suffix(self.actor.checkpoint_file, suffix))
+        torch.save(self.critic_1.state_dict(), self._with_suffix(self.critic_1.checkpoint_file, suffix))
+        torch.save(self.critic_2.state_dict(), self._with_suffix(self.critic_2.checkpoint_file, suffix))
+        torch.save(self.target_critic_1.state_dict(), self._with_suffix(self.target_critic_1.checkpoint_file, suffix))
+        torch.save(self.target_critic_2.state_dict(), self._with_suffix(self.target_critic_2.checkpoint_file, suffix))
 
-    """
+    def load_models(self, suffix=""):
+        print('... loading models ...')
 
+        self.actor.load_state_dict(torch.load(self._with_suffix(self.actor.checkpoint_file, suffix)))
+        self.critic_1.load_state_dict(torch.load(self._with_suffix(self.critic_1.checkpoint_file, suffix)))
+        self.critic_2.load_state_dict(torch.load(self._with_suffix(self.critic_2.checkpoint_file, suffix)))
+        self.target_critic_1.load_state_dict(torch.load(self._with_suffix(self.target_critic_1.checkpoint_file, suffix)))
+        self.target_critic_2.load_state_dict(torch.load(self._with_suffix(self.target_critic_2.checkpoint_file, suffix)))
+
+    def _with_suffix(self, path, suffix):
+        """Append suffix to checkpoint filename before the .pth extension."""
+        if suffix:
+            return path.replace(".pth", f"_episode_{suffix}.pth")
+        return path

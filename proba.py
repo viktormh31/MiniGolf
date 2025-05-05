@@ -32,13 +32,13 @@ wandb.init(
         "batch_size": 2048,
         "nn_dims": 512,
         "temperature": 0.3,
-        "episodes": 30000,
+        "episodes": 300000,
         "entropy": -2,
         "init weights": "Xavier_uniform_",
         "optimizer": "AdamW",
         "gamma": 0.95
     },
-    id= 'test36 - camera  test 3 - pos + vel'
+    id= 'test41 - camera test 7 - pos + vel, changed camera position - Final test long'
 )  
 env =XarmRobotGolf(config)
 #test_env = XarmRobotGolf(test_config)
@@ -53,44 +53,54 @@ agent = Agent(lr_actor,lr_critic,input_dims,obs_dims,n_actions,max_action,fc1_di
 
 
 test_scores = []
+phase_average = []
 test_episode_count = 0
 
-@torch.no_grad
-def test():
+#@torch.no_grad
+def test(episode_reached):
+    env.close()
     with torch.no_grad():
         test_env = XarmRobotGolf(test_config)
         test_env.phase = env.phase
-        #test_env.test_reset()
-        agent.evaluate_mode()
-        test_episode_range = 100
-        made = 0
+        test_env.reset()
+        #agent.evaluate_mode()
+        test_episode_range = 5
+        made = 0.
         for test_episode in trange(test_episode_range):
             test_observation = test_env.reset()
             test_time_step = 0
             test_score = 0
-            while test_time_step < 50:
-                test_obs = np.concatenate([test_observation['observation'],test_observation['achieved_goal'],test_observation['desired_goal']],axis=-1,dtype=np.float32) #  ili axis = 0
-                test_action = agent.choose_action(test_obs,True)
-                test_next_observation, test_reward, test_done, _ = test_env.step(test_action)
-                test_observation = test_next_observation
+            agent.last_position = None
+            agent.last_time = None
+
+            while test_time_step < episode_length:
+                action = agent.choose_action(test_observation, test_time_step,False)
+                test_next_observation, test_reward, test_done, _ = test_env.step(action)
+            
+
                 
                 test_score +=  test_reward
+                test_time_step += 1
                 if test_done:
                     break
-                test_time_step += 1
-                time.sleep(1./30)
+                
+                test_observation = test_next_observation
+                #time.sleep(1./30)
             test_scores.append(test_score)
             if test_score> -50:
-                made+=1
+                made+=1.
             print(f"Test Episode {len(test_scores)}, score - {test_score}")
-        agent.training_mode()
+        #agent.training_mode()
         test_env.close()
-        print(f"Test 100 average score: {np.average(test_scores[-100:])}")
-        print(f"Success rate - {made}%")
+        print(f"Test 200 average score: {np.average(test_scores[-200:])}")
+        print(f"Success rate - {made/2.}%")
+        phase_average.append(np.average(test_scores[-200:]))
+        env.connect()
+        agent.save_models(episode_reached)
 
 
 episode_length = 50
-num_of_episodes = 30000
+num_of_episodes = 300000    
 scores = []
 actor_losses = []
 critic_losses = []
@@ -100,101 +110,73 @@ loss = []
 als = []
 cls = []
 tls = []
+success= []
 
+def main():
+    
+    for episode in trange(num_of_episodes):
+            observation = env.reset()
+            time_step = 0
+            episode_score = 0
+            agent.last_position = None
+            agent.last_time = None
 
-
-
-for episode in trange(num_of_episodes):
-        observation = env.reset()
-        time_step = 0
-        episode_score = 0
-        agent.last_position = None
-        agent.last_time = None
-
-        
-        while time_step < episode_length:
-            #obs = np.concatenate([observation['observation'],observation['achieved_goal'],observation['desired_goal']],axis=-1,dtype=np.float32) #  ili axis = 0
-            action = agent.choose_action(observation, time_step)
-            next_observation, reward, done, info = env.step(action)
             
-            agent.real_memory_append(observation,
-                                     action,
-                                     reward,
-                                     done,
-                                     next_observation,
-                                     time_step,
-                                     1)
-           
+            while time_step < episode_length:
+                
+                action = agent.choose_action(observation, time_step)
+                next_observation, reward, done, info = env.step(action)
+                
+                agent.real_memory_append(observation,
+                                        action,
+                                        reward,
+                                        done,
+                                        next_observation,
+                                        time_step,
+                                        1)
+                
+                if episode > 50:
+                    batch = agent.memory.sample()
+                    al, cl, tl ,alpha,log_alpha= agent.learn(batch)
+                
+                episode_score += reward
+                time_step += 1#pogledaj da li ovo ide pre ili posle breaka
+                if done:
+                    break
+                
+                observation = next_observation
+                
+            
+            
+            scores.append(episode_score)
+            avg_score = np.mean(scores[-100:])
+            print(f"Episode:, {episode}, score: {episode_score}, average score: {avg_score}")
+            
             if episode > 50:
-                batch = agent.memory.sample()   # napravi funkciju za ovo
-                al, cl, tl ,alpha,log_alpha= agent.learn(batch)
-                #wandb.log({"actor_loss": al, "critic_loss": cl, "temp_loss": tl})
-            episode_score += reward
-            time_step += 1#pogledaj da li ovo ide pre ili posle breaka
-            if done:
-                break
+                wandb.log({"score": avg_score,"actor_loss": al, "critic_loss": cl, "temp_loss": tl, "alpha": alpha, "log_alpha":log_alpha})
             
-            observation = next_observation
+            her_achieved_goals= agent.memory.real_buffer.return_achieved_goals(time_step)   # napravi funkciju za ovo
+            her_rewards, her_dones = env.compute_her_reward(her_achieved_goals[-1], her_achieved_goals)
+            agent.her_memory_append(time_step,her_rewards,her_dones)
+
+            if episode == 3000:
+                success_rate = sum(1 for x in scores[-200:] if x > -50)/2.
+                success.append(success_rate)
+                agent.save_models(episode)
+                env.phase = 2  
+            elif episode == 10000:
+                success_rate = sum(1 for x in scores[-200:] if x > -50)/2.
+                success.append(success_rate)
+                agent.save_models(episode)
+                env.phase = 3
+            elif episode % 10000 == 0 and episode > 10000:
+                success_rate = sum(1 for x in scores[-200:] if x > -50) / 2. 
+                success.append(success_rate)
+                agent.save_models(episode)
+                #env.phase = 3
         
-        
-        scores.append(episode_score)
-        avg_score = np.mean(scores[-100:])
-        print(f"Episode:, {episode}, score: {episode_score}, average score: {avg_score}")
-        
-        if episode > 50:
-            wandb.log({"score": avg_score,"actor_loss": al, "critic_loss": cl, "temp_loss": tl, "alpha": alpha, "log_alpha":log_alpha})
-        
-        #if (episode)% 1000 == 0:
-        #    test()
-        
-        #end_achieved_episode_goal = observation['achieved_goal']
+    wandb.finish()
 
-
-        her_achieved_goals= agent.memory.real_buffer.return_achieved_goals(time_step)   # napravi funkciju za ovo
-        her_rewards, her_dones = env.compute_her_reward(her_achieved_goals[-1], her_achieved_goals)
-        agent.her_memory_append(time_step,her_rewards,her_dones)
-
-
-        """
-        for index in range(time_step):
-
-
-            her_obs = {
-                'observation': observations[index],
-                'achieved_goal': achieved_goals[index],
-                'desired_goal': end_achieved_episode_goal
-            }
-            her_next_obs = {
-                'observation': next_observations[index],
-                'achieved_goal': next_achieved_goals[index],
-                'desired_goal': end_achieved_episode_goal
-            }
-            
-            her_reward = env.compute_reward(achieved_goals[index],end_achieved_episode_goal)
-            her_done = her_reward + 1 #ish
-            agent.memory.her_buffer.append(her_obs,
-                                                actions[index],
-                                                her_reward,
-                                                her_done,
-                                                her_next_obs,
-                                                1)
-
-        """
-
-        if episode == 3000:
-            env.phase = 2    
-        if episode == 10000:
-            env.phase = 3
-        """
-        observations = []
-        achieved_goals=[]
-        desired_goals =[]
-        actions = []
-        rewards = []
-        next_observations = []
-        next_achieved_goals=[]
-        next_desired_goals =[]
-        """
-        
-
-wandb.finish()
+#agent.load_models(3000)
+#test(3000)
+main()

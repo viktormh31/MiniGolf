@@ -40,7 +40,7 @@ class XarmRobotGolf():
         self.physics_client.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.physics_client.setGravity(0.0,0.0,-9.81)
         self.physics_client.setRealTimeSimulation(0)
-        #self.physics_client.resetDebugVisualizerCamera(cameraDistance=0.7, cameraYaw=90, cameraPitch=-89, cameraTargetPosition=[1,0,0.4])
+        self.physics_client.resetDebugVisualizerCamera(cameraDistance=0.7, cameraYaw=90, cameraPitch=-89, cameraTargetPosition=[.6,0,0.4])
 
         #camera settings
         self.cam_width, self.cam_height = 640, 640
@@ -56,13 +56,9 @@ class XarmRobotGolf():
         self.view_matrix = p.computeViewMatrix(cam_eye, cam_target, cam_up)
         self.proj_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
 
-
-
-
-         # load plane
+        # load plane
         self._load_plane()
-
-
+        
         # robot parameters
         self.num_joints = 17
         self.gripper_driver_index = 10
@@ -75,10 +71,10 @@ class XarmRobotGolf():
         self.gripper_base_default_pos = [0.35, 0., 0.02]
         self.max_vel = 1
         self.max_angle = np.radians(45)
+
         # load robot
         fullpath = os.path.join(os.path.dirname(__file__), 'urdf/xarm7.urdf')
         self.xarm = self.physics_client.loadURDF(fullpath, [0,0,0], [0,0,0,1], useFixedBase = True)
-
 
         # hole params
         self.hole_space = spaces.Box(low=np.array([0.9, -0.2, 0.02],dtype=np.float32)
@@ -87,10 +83,8 @@ class XarmRobotGolf():
         self.distance_threshold = 0.05
 
         # load goal
-        
         self._load_golf_hole()
         
-
         # ball params
         self.golf_ball_space = spaces.Box(low=np.array([0.45, -0.1, 0.02],dtype=np.float32)
                                         ,high=np.array([0.6 ,0.1, 0.02],dtype=np.float32))
@@ -175,7 +169,7 @@ class XarmRobotGolf():
     def _calculate_quaternion(self,action):
         current_quaternion = self.physics_client.getLinkState(self.xarm,self.tcp_index)[1]
         current_euler = np.array(self.physics_client.getEulerFromQuaternion(current_quaternion))
-        scaled_turn_action = action * self.dt
+        scaled_turn_action = action * self.dt *2
         new_euler_2 = current_euler[2] + scaled_turn_action
         new_euler_2 = np.clip(new_euler_2,-self.max_angle,self.max_angle)
         new_euler = np.array([current_euler[0],current_euler[1],new_euler_2])
@@ -188,8 +182,9 @@ class XarmRobotGolf():
         #robot state
         tcp_state = self.physics_client.getLinkState(self.xarm, self.tcp_index, computeLinkVelocity=1)
         tcp_pos = torch.tensor(tcp_state[0])
-        tcp_rot = self.physics_client.getEulerFromQuaternion(np.array(tcp_state[1]))
-        tcp_rot = torch.tensor(tcp_rot).to()
+        #tcp_rot = self.physics_client.getEulerFromQuaternion(np.array(tcp_state[1]))
+        # tcp_rot = torch.tensor(tcp_rot)
+        tcp_rot = torch.tensor(tcp_state[1]) #Mozda bez eulerfromquaternion da bi lakse agent skontao cemu sluzi rotacija
         tcp_vel = torch.tensor(tcp_state[6])
         
         #image
@@ -244,10 +239,17 @@ class XarmRobotGolf():
 
     def _load_plane(self):
         plane = self.physics_client.loadURDF("plane.urdf", [0,0,0], [0,0,0,1])
+        self.physics_client.changeVisualShape(
+            objectUniqueId= plane,
+            linkIndex = -1,
+            rgbaColor = [1,1,1,1]
+        ) 
         self.physics_client.changeDynamics(plane,-1, 
                  lateralFriction = .05,
                  rollingFriction = .1,
-                 restitution = .7)
+                 restitution = .7,
+                 )
+        
         
     def _load_golf_hole(self):
         fullpath = os.path.join(os.path.dirname(__file__), 'urdf/my_golf_hole.urdf')
@@ -328,6 +330,8 @@ class XarmRobotGolf():
     def get_image(self):
         _,_,rgb_img,_,_ = p.getCameraImage(self.cam_width, self.cam_height,self.view_matrix,self.proj_matrix,renderer = p.ER_TINY_RENDERER)
         
+        cv.imwrite('saved_image.jpg', rgb_img)
+
         return rgb_img
 
 

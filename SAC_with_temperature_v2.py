@@ -4,18 +4,20 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F 
-import numpy as np
 from memory import HerBuffer
 #import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 from ultralytics import YOLO
 import cv2 as cv
 import time
+from pathlib import Path
 
 #https://arxiv.org/pdf/1812.05905 - SAC with automatic entropy adjustment
 
 
 DEVICE = 'cuda'
+BASE_DIR = Path(__file__).resolve().parent
+YOLO_PATH = BASE_DIR / "models" / "golf_recognition_yolov8"
 
 class CriticNetwork(nn.Module):
     def __init__(self,input_dims, n_actions, fc1_dims, fc2_dims, lr_critic,name):
@@ -27,6 +29,7 @@ class CriticNetwork(nn.Module):
         self.fc3_dims = fc2_dims
         self.lr_actor = lr_critic
 
+        #LAYERS
         self.fc1 = nn.Sequential(
                 nn.Linear(self.input_dims + self.n_actions, self.fc1_dims),
                 nn.ReLU()
@@ -42,12 +45,10 @@ class CriticNetwork(nn.Module):
             )
         self.q = nn.Linear(self.fc3_dims,1)
 
+        #PARAMS
         self.optimizer = optim.AdamW(self.parameters(),lr=lr_critic)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
-
-        
         self.checkpoint_file = os.path.join('models/agent/checkpoint',f"{name}.pth")
-
         self.to(self.device)
 
     def forward(self,state,action):
@@ -71,7 +72,7 @@ class ActorNetwork(nn.Module):
         self.lr_actor = lr_actor
         self.reparam_noise = float(1e-6)
         
-
+        #LAYERS
         self.fc1 = nn.Sequential(
                 nn.Linear(self.input_dims, self.fc1_dims),
                 nn.ReLU()
@@ -85,15 +86,13 @@ class ActorNetwork(nn.Module):
             nn.Linear(self.fc2_dims,self.fc3_dims),
             nn.ReLU()
         )
+
+        #PARAMS
         self.mu = nn.Linear(self.fc3_dims,self.n_actions)
-        self.var = nn.Linear(self.fc3_dims,self.n_actions)
-            
+        self.var = nn.Linear(self.fc3_dims,self.n_actions) 
         self.optimizer = optim.AdamW(self.parameters(),lr=lr_actor)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
-        
         self.checkpoint_file = os.path.join('models/agent/checkpoint', "actor.pth")
-
-        
         self.to(self.device)
         
         
@@ -147,14 +146,11 @@ class Agent(object):
         self.critic_losses = []
         self.temperature_losses = []
         
-
-
         self.actor = ActorNetwork(self.input_dims,self.n_actions,self.max_action, fc1_dim,fc2_dim,lr_actor)
         self.critic_1 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"critic_1")
         self.target_critic_1 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"target_critic_1")
         self.critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"critic_2")
         self.target_critic_2 = CriticNetwork(self.input_dims,self.n_actions,fc1_dim, fc2_dim,lr_critic,"target_critic_2")
-
 
         self.target_entropy = -2 #self.n_actions
         self.temperature = 0.3
@@ -165,14 +161,15 @@ class Agent(object):
         self.initialize_weights(self.critic_1)
         self.initialize_weights(self.critic_2)
         
-        self.model = YOLO('models/golf_recognition_yolov8.pt').to(self.actor.device)
+        print("CWD:", __file__)
+
+        self.model = YOLO("XarmGolf/models/golf_recognition_yolov8.pt").to(self.actor.device)
         self.picture_height = 640
         self.picture_width = 640
 
         self.last_position = None
         self.last_time = None
 
-    
         self.update_network_params(1)
         self.memory = HerBuffer(self.batch_size, self.batch_ratio,  50, self.obs_dims, self.n_actions,
                                 3, self.max_memory_size)
@@ -308,15 +305,19 @@ class Agent(object):
         hole_found = False
 
         rgb_image = cv.cvtColor(img,cv.COLOR_BGR2RGB)
+        cv.imwrite("procesirana.jpg", rgb_image)
         start = time.time()
         results = self.model(rgb_image, verbose = False)
+        
         end = time.time()
         processing_time = start - end
-        #print(1000*(end - start))
-        #img = results[0].plot()
-        #cv.imshow("Live Tracking",rgb_image)
-        #cv.waitKey(1)
+        print(1000*(end - start))
+        img = results[0].plot()
+        cv.imshow("Live Tracking",rgb_image)
+        cv.waitKey(1)
         for r in results:
+            r.save(filename = "yolov.jpg")
+            
             #print(r.boxes)
             for detected_object in r.boxes.data:
                 #print(detected_object)
@@ -331,8 +332,8 @@ class Agent(object):
                     golf_hole_coords = real_coords
                     hole_found = True
 
-        #cv.imshow("Live Tracking", rgb_image)
-
+        cv.imshow("Live Tracking", rgb_image)
+        #cv.imwrite("yolovision.jpg", results)
 
         if not ball_found:
             golf_ball_coords = torch.squeeze(self.memory.real_buffer.return_achieved_goals(1))
@@ -353,6 +354,8 @@ class Agent(object):
     def calculate_speed(self,current_pos, current_step):
         if self.last_position is None or self.last_time is None:
             speed = torch.tensor([0,0,0], device= self.actor.device)
+            #self.last_position = current_pos
+            #self.last_time = current_step
         else:
             delta_pos = current_pos- self.last_position
             delta_t = current_step - self.last_time
@@ -366,6 +369,9 @@ class Agent(object):
         y1,x1,y2,x2 = yolo_coords
         real_x1 = (x1 + x2)*0.92376/(2*640) + 0.3381
         real_y1 = (y1 + y2)*0.92376/(2*640) -0.46188
+        #real_x1 = (x1 + x2)*0.000679687/2 + 0.35
+        #real_y1 = (y1 + y2)*0.000679687/2 -0.435
+
 
         return torch.tensor([real_x1.round(decimals=4),real_y1.round(decimals=4)]).to(self.actor.device)
     
@@ -422,7 +428,7 @@ class Agent(object):
 
     def load_models(self, suffix=""):
         print('... loading models ...')
-
+        #self.model = YOLO('models/yolo_model_v2.pt').to(self.actor.device)
         self.actor.load_state_dict(torch.load(self._with_suffix(self.actor.checkpoint_file, suffix)))
         self.critic_1.load_state_dict(torch.load(self._with_suffix(self.critic_1.checkpoint_file, suffix)))
         self.critic_2.load_state_dict(torch.load(self._with_suffix(self.critic_2.checkpoint_file, suffix)))

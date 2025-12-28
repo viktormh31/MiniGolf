@@ -1,0 +1,10 @@
+checkpoints/
+models/
+weights/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npz
+*.h5
+

@@ -256,7 +256,9 @@ class Agent(object):
 
         self.update_network_params()
 
-        return actor_loss,critic_loss,temperature_loss, self.temperature, self.log_temperature
+    def reset_positions(self):
+        self.last_position = None
+        self.last_time = None
 
     def evaluate_mode(self):
         self.actor.eval()

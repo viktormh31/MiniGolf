@@ -17,7 +17,7 @@ from pathlib import Path
 
 DEVICE = 'cuda'
 BASE_DIR = Path(__file__).resolve().parent
-YOLO_PATH = BASE_DIR / "models" / "golf_recognition_yolov8"
+YOLO_PATH = BASE_DIR / "models" / "golf_recognition_yolov8.pt"
 
 class CriticNetwork(nn.Module):
     def __init__(self,input_dims, n_actions, fc1_dims, fc2_dims, lr_critic,name):
@@ -163,7 +163,7 @@ class Agent(object):
         
         print("CWD:", __file__)
 
-        self.model = YOLO("XarmGolf/models/golf_recognition_yolov8.pt").to(self.actor.device)
+        self.model = YOLO(YOLO_PATH).to(self.actor.device)
         self.picture_height = 640
         self.picture_width = 640
 

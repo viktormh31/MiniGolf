@@ -256,7 +256,9 @@ class Agent(object):
 
         self.update_network_params()
 
-        return actor_loss,critic_loss,temperature_loss, self.temperature, self.log_temperature
+    def reset_positions(self):
+        self.last_position = None
+        self.last_time = None
 
     def evaluate_mode(self):
         self.actor.eval()
@@ -306,12 +308,8 @@ class Agent(object):
 
         rgb_image = cv.cvtColor(img,cv.COLOR_BGR2RGB)
         cv.imwrite("procesirana.jpg", rgb_image)
-        start = time.time()
         results = self.model(rgb_image, verbose = False)
         
-        end = time.time()
-        processing_time = start - end
-        print(1000*(end - start))
         img = results[0].plot()
         cv.imshow("Live Tracking",rgb_image)
         cv.waitKey(1)

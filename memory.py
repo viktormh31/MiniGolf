@@ -1,6 +1,6 @@
-import numpy as np
 import torch
 DEVICE = 'cuda'
+
 class HerBuffer():
     def __init__(self,batch_size,batch_ratio,max_episode_timesteps, obs_dims, n_actions,goal_dim,max_buffer_size = 1e6) -> None:
         self.batch_size = batch_size
@@ -100,7 +100,8 @@ class BaseBuffer():
         #if self.counter < self.batch_size: # episode buffer ne koristi ovu funkciju, ali bi inace uvek radio prazan return
         #    return
         max_index = min(self.counter, self.max_size)
-        indices = np.random.choice(max_index, self.batch_size, replace=False)
+        #indices = np.random.choice(max_index, self.batch_size, replace=False)
+        indices = torch.randint(0,max_index,(self.batch_size,), device= DEVICE)
       
         return {
             'observations': self.observations[indices],
@@ -129,7 +130,7 @@ class BaseBuffer():
     def return_episode(self,time_steps):
 
         index = self.counter % self.max_size
-        indices = np.arange(index-time_steps, index) % self.max_size
+        indices = torch.arange(index-time_steps, index,device=DEVICE) % self.max_size
 
         return {
             'obs' :{
@@ -150,13 +151,13 @@ class BaseBuffer():
 
     def return_achieved_goals(self,episode_length):
         index = self.counter % self.max_size
-        indices = np.arange(index-episode_length, index) % self.max_size
+        indices = torch.arange(index-episode_length, index,device = DEVICE) % self.max_size
 
         return self.achieved_goals[indices]
     
     def return_desired_goals(self,episode_length):
         index = self.counter % self.max_size
-        indices = np.arange(index-episode_length, index) % self.max_size
+        indices = torch.arange(index-episode_length, index,device= DEVICE) % self.max_size
 
         return self.desired_goals[indices]
 

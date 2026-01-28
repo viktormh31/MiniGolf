@@ -2,7 +2,7 @@ import numpy as np
 from SAC_with_temperature_v2 import Agent
 import torch
 from XarmGolfEnv import XarmRobotGolf
-from XarmReach import XarmRobotReach
+
 from tqdm import trange
 import time
 import wandb

@@ -4,7 +4,7 @@
 #-----------------
 TRAIN_ENV_CONFIG= {
 
-    'GUI' : False,
+    'GUI' : True,
     'reward_type' : "sparse",
 }
 TEST_ENV_CONFIG = {
@@ -19,7 +19,7 @@ TEST_ENV_CONFIG = {
 
 WANDB_CONFIG= {
     "project": "Xarm-golf",
-    "run_id": "test44-optimization",
+    "run_id": "test45-tensor_object_detection_test",
     "hyperparameters": {
         "lr_actor": 1e-4,
         "lr_critic": 3e-3,

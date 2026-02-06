@@ -177,44 +177,15 @@ class XarmRobotGolf():
         return new_quaternion
 
     def _get_obs(self):
-            #find a way to introduce orientation of gripper as obs
 
-        #robot state
         tcp_state = self.physics_client.getLinkState(self.xarm, self.tcp_index, computeLinkVelocity=1)
         tcp_pos = torch.tensor(tcp_state[0])
-        #tcp_rot = self.physics_client.getEulerFromQuaternion(np.array(tcp_state[1]))
-        # tcp_rot = torch.tensor(tcp_rot)
-        tcp_rot = torch.tensor(tcp_state[1]) #Mozda bez eulerfromquaternion da bi lakse agent skontao cemu sluzi rotacija
+        tcp_rot = torch.tensor(tcp_state[1])
         tcp_vel = torch.tensor(tcp_state[6])
         
         #image
         bgr_img = self.get_image()
-        """
-        #golf ball state
-        self.golf_ball_pos, ball_orientation = self.physics_client.getBasePositionAndOrientation(self.golf_ball)
-        noise = np.random.uniform(-0.01,0.01,3)
-        noise[2] = 0
-        self.golf_ball_pos += noise
-        ball_orientation = self.physics_client.getEulerFromQuaternion(ball_orientation)
-        ball_vel = self.physics_client.getBaseVelocity(self.golf_ball)[0]
-        v_noise = np.random.uniform(-0.01,0.01,3)
-        v_noise[2] = 0
-        ball_vel += v_noise
-        relative_ball_vel = ball_vel - tcp_vel
-        #ball_ang_vel = p.getBaseVelocity(self.golf_ball)[1]
-
-        
-        # distance
-        #distance = np.array([np.linalg.norm(self.hole_pos-self.golf_ball_pos,axis=-1)])
-        distance = self.golf_ball_pos - tcp_pos
-        ball_to_hole = self.hole_pos - self.golf_ball_pos
        
-        # obs = np.concatenate((
-        #             tcp_pos,tcp_rot, tcp_vel, self.golf_ball_pos, ball_vel, distance
-        # ),axis= -1)
-        #obs = np.concatenate((obs,distance),axis =-1)
-        # proverena kombinacija: tcp_pos,tcp_rot, tcp_vel, self.golf_ball_pos, relative_ball_vel,ball_orientation, distance
-        """
         return {
                     'robot_obs' :{ 'tcp_pos' : tcp_pos,
                                     'tcp_rot' : tcp_rot,
@@ -330,7 +301,7 @@ class XarmRobotGolf():
     def get_image(self):
         _,_,rgb_img,_,_ = p.getCameraImage(self.cam_width, self.cam_height,self.view_matrix,self.proj_matrix,renderer = p.ER_TINY_RENDERER)
         
-        cv.imwrite('saved_image.jpg', rgb_img)
+        #cv.imwrite('saved_image.jpg', rgb_img)
 
         return rgb_img
 

@@ -1,12 +1,5 @@
 import numpy as np
 import torch
-<<<<<<< HEAD
-from XarmGolfEnv import XarmRobotGolf
-
-from tqdm import trange
-import time
-=======
->>>>>>> 68f0900685d43ba07350dabc324f993b85b6c007
 import wandb
 from tqdm import trange
 

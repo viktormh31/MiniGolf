@@ -1,2 +1,36 @@
+# wandb
 wandb/
 *.wandb
+
+# --- Python Environments ---
+# This ignores all your virtual environments
+venv/
+venv_clean/
+opencv_env/
+env/
+.env/
+
+# --- Computer Vision & AI Large Files ---
+# Ignore raw datasets (often too big for Git)
+datasets/
+data/*.zip
+data/*.jpg
+data/*.png
+
+# Ignore Weights (Trained YOLO models)
+*.pt
+*.onnx
+*.weights
+
+# --- Python System Junk ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Editor & OS Junk ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

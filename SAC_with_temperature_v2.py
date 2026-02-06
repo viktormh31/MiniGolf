@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from memory import HerBuffer
 #import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
-from ultralytics import YOLO
+#from ultralytics import YOLO
 import cv2 as cv
 import time
 from pathlib import Path
@@ -163,7 +163,7 @@ class Agent(object):
         
         print("CWD:", __file__)
 
-        self.model = YOLO(YOLO_PATH).to(self.actor.device)
+        #self.model = YOLO(YOLO_PATH).to(self.actor.device)
         self.picture_height = 640
         self.picture_width = 640
 
@@ -173,22 +173,6 @@ class Agent(object):
         self.update_network_params(1)
         self.memory = HerBuffer(self.batch_size, self.batch_ratio,  50, self.obs_dims, self.n_actions,
                                 3, self.max_memory_size)
-        
-    def update_network_params(self, tau= None):
-        if tau is None:
-            tau = self.tau
-
-        for eval_param, target_param in zip(self.critic_1.parameters(), self.target_critic_1.parameters()):
-            target_param.data.copy_(tau*eval_param + (1.0-tau)*target_param.data)
-        for eval_param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
-            target_param.data.copy_(tau*eval_param + (1.0-tau)*target_param.data)
-            
-    def initialize_weights(self,model):
-        for layer in model.modules():
-            if isinstance(layer, nn.Linear):
-                torch.nn.init.xavier_uniform_(layer.weight)
-                if layer.bias is not None:
-                    torch.nn.init.zeros_(layer.bias)
 
     def learn(self,batch):
 
@@ -295,16 +279,56 @@ class Agent(object):
         }                                               
         
     def process_image(self, img,time_step):
+        import cv2
         """
         label_number :
             - 0.0  --> golf ball
             - 1.0  --> golf hole
 
-        !!!!! ubaci logiku ako ne pronadju u datom framu loptu ili rupu koje koordinate da im zada! !!!!!
+        
         """
-       # bgr_image = np.reshape(img[2], (self.picture_height, self.picture_width, -1))[:, :, :3]  # Extract RGB
         ball_found = False
         hole_found = False
+        #cv2.imshow("img", img)
+        #cv2.waitKey(0)
+        #img_copy = img.copy()
+        img = torch.from_numpy(img).to(DEVICE).permute(2,0,1)
+
+        #img = img[:, :, [2, 1, 0]]
+
+
+        # Red Ball: Look for Red > 200, Green < 100, Blue < 100
+        blue_mask = (img[0] > 80) & (img[1] < 100) & (img[2] < 100)
+        #self.show_mask("blue",blue_mask)
+
+
+        # Blue Hole: Look for Blue > 200, Red < 100, Green < 100
+        red_mask = (img[0] < 100) & (img[1] < 100) & (img[2] > 100)
+        #self.show_mask("red",red_mask)
+
+
+        golf_ball_coords = self.get_center(red_mask)
+        golf_hole_coords = self.get_center(blue_mask)
+
+
+
+
+
+        if golf_ball_coords == None:
+            golf_ball_coords = torch.squeeze(self.memory.real_buffer.return_achieved_goals(1))
+        else:
+            golf_ball_coords = self.convert_ball_coords_to_real(golf_ball_coords)
+
+        if golf_hole_coords == None:
+            golf_hole_coords = torch.squeeze(self.memory.real_buffer.return_desired_goals(1))
+        else:
+            golf_hole_coords = self.convert_hole_coords_to_real(golf_hole_coords)
+        
+        golf_ball_speed = self.calculate_speed(golf_ball_coords,time_step)
+
+
+        """
+        
 
         rgb_image = cv.cvtColor(img,cv.COLOR_BGR2RGB)
         cv.imwrite("procesirana.jpg", rgb_image)
@@ -345,23 +369,54 @@ class Agent(object):
         
 
         golf_ball_speed = self.calculate_speed(golf_ball_coords, time_step)
-
+        """
 
         return golf_ball_coords, golf_hole_coords, golf_ball_speed
     
+    def show_mask(self,name,mask_tensor):
+        import cv2
+        mask_np = (mask_tensor.cpu().byte()*255).numpy()
+        cv2.imshow(name, mask_np)
+        cv2.waitKey(0)
+
     def calculate_speed(self,current_pos, current_step):
-        if self.last_position is None or self.last_time is None:
-            speed = torch.tensor([0,0,0], device= self.actor.device)
-            #self.last_position = current_pos
-            #self.last_time = current_step
-        else:
+        speed = torch.tensor([0,0,0], device= DEVICE)
+
+        if self.last_position is not None or self.last_time is not None:
+
             delta_pos = current_pos- self.last_position
             delta_t = current_step - self.last_time
-            speed = (delta_pos / delta_t) if delta_t > 0 else torch.tensor([0,0,0]).to(self.actor.device)
+            speed = (delta_pos / delta_t) if delta_t > 0 else torch.tensor([0,0,0]).to(DEVICE)
 
         
 
         return speed
+
+    def get_center(self,mask):
+        indices = torch.nonzero(mask)
+        if indices.shape[0] == 0:
+            return None
+        
+        center_yx = indices.float().mean(dim=0)
+
+        return center_yx.flip(dims=[0])
+
+    def convert_ball_coords_to_real(self,img_coords):
+        y,x = img_coords
+        real_x = (x)*0.92376/(640) + 0.3367
+        real_y = (y)*0.92376/(640) - 0.46169
+
+        return torch.tensor([real_x.round(decimals=4),real_y.round(decimals=4),torch.tensor([0.02])]).to(self.actor.device)
+      
+    def convert_hole_coords_to_real(self,img_coords):
+        y,x = img_coords
+        real_x = (x)*0.92376/(640) + 0.3257
+        real_y = (y)*0.92376/(640) - 0.46378
+
+        return torch.tensor([real_x.round(decimals=4),real_y.round(decimals=4),torch.tensor([0.02])]).to(self.actor.device)
+      
+
+
 
     def get_coords_from_yolo(self,yolo_coords):
         y1,x1,y2,x2 = yolo_coords
@@ -438,3 +493,22 @@ class Agent(object):
         if suffix:
             return path.replace(".pth", f"_episode_{suffix}.pth")
         return path
+
+    def initialize_weights(self,model):
+        for layer in model.modules():
+            if isinstance(layer, nn.Linear):
+                torch.nn.init.xavier_uniform_(layer.weight)
+                if layer.bias is not None:
+                    torch.nn.init.zeros_(layer.bias)
+
+                            
+    def update_network_params(self, tau= None):
+        if tau is None:
+            tau = self.tau
+
+        for eval_param, target_param in zip(self.critic_1.parameters(), self.target_critic_1.parameters()):
+            target_param.data.copy_(tau*eval_param + (1.0-tau)*target_param.data)
+        for eval_param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
+            target_param.data.copy_(tau*eval_param + (1.0-tau)*target_param.data)
+            
+  
